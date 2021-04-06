@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+
+<launch>
+    <arg name="HEXAPOD" default="false" doc="Set to true if the robot to be used is the hexapod"/>
+    <arg name="ROLLERWALKER" default="false" doc="Set to true if the robot to be used is the roller walker"/>
+    <arg name="DYNAMIC_RECONFIGURE" default="false" doc="Set to true if dynamic reconfigure window needs to be launched for slide based individual motor control"/>
+
+    <group if="$(arg HEXAPOD)">
+        <include file="$(find me_cs301_robots)/launch/hexapod_control.launch">
+            <arg name="DYNAMIC_RECONFIGURE" value="$(arg DYNAMIC_RECONFIGURE)"/>
+        </include>
+	</group>
+    <group if="$(arg ROLLERWALKER)">
+        <include file="$(find me_cs301_robots)/launch/roller_walker_control.launch">
+            <arg name="DYNAMIC_RECONFIGURE" value="$(arg DYNAMIC_RECONFIGURE)"/>
+        </include>
+	</group>
+
+</launch>

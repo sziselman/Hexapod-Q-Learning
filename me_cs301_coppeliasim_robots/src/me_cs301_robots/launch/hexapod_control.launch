@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+
+<launch>
+    <arg name="DYNAMIC_RECONFIGURE" default="false" />
+	<node pkg="me_cs301_robots" output="screen" type="hexapod_control.py" name="hexapod_control">
+    </node>
+    <group if="$(arg DYNAMIC_RECONFIGURE)">
+        <node pkg="rqt_reconfigure" name="rqt_reconfigure" type="rqt_reconfigure" />
+    </group>
+
+</launch>
