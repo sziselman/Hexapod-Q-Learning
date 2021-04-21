@@ -105,38 +105,36 @@ class HexapodControl(RobotControl):
         home_j2 = -0.50
         home_j3 = 2.09
 
+        extend_j3 = 0.55
+        extend_j2 = 0.18
         angle_change = math.pi/3
-        extend = 0.59
 
-        target_rai_j2 = -1
+        raise_j2 = -1.0
+        target_rai_j2 = -1.0
         
 
-        # raise legs 1, 3, 5
+        # raise legs 1, 3, 5 (joint 2)
+        # rotate legs 3 and 5 (joint 1)
+        # extend leg 1 (joint 3)
 
-        joint_names = ['hexa_leg1_j2', 'hexa_leg3_j2', 'hexa_leg5_j2']
-        target_angles = [target_rai_j2]*len(joint_names)
+        joint_names = ['hexa_leg1_j2', 'hexa_leg1_j3', 'hexa_leg3_j1', 'hexa_leg3_j2', 'hexa_leg5_j1', 'hexa_leg5_j2']
+        target_angles = [raise_j2, extend_j3, -angle_change, raise_j2, angle_change, raise_j2]
 
         self.setMotorTargetJointPosition('leg1_j2', target_angles[0])
-        self.setMotorTargetJointPosition('leg3_j2', target_angles[1])
-        self.setMotorTargetJointPosition('leg5_j2', target_angles[2])
+        self.setMotorTargetJointPosition('leg1_j3', target_angles[1])
+        self.setMotorTargetJointPosition('leg3_j2', target_angles[3])
+        self.setMotorTargetJointPosition('leg3_j1', target_angles[2])
+        self.setMotorTargetJointPosition('leg5_j2', target_angles[5])
+        self.setMotorTargetJointPosition('leg5_j1', target_angles[4])
 
         self.next_move(joint_names, target_angles)
 
-        # rotate legs 3 and 5
-        # extend leg 1 joint 3
-        joint_names = ['hexa_leg1_j3', 'hexa_leg3_j1', 'hexa_leg5_j1']
-        target_angles = [1.5, -angle_change, angle_change]
-
-        self.setMotorTargetJointPosition('leg1_j3', target_angles[0])
-        self.setMotorTargetJointPosition('leg3_j1', target_angles[1])
-        self.setMotorTargetJointPosition('leg5_j1', target_angles[2])
-
-        self.next_move(joint_names, target_angles)
+        #####################################################################
 
         # lower legs 3 and 5
         joint_names = ['hexa_leg1_j2', 'hexa_leg3_j2', 'hexa_leg5_j2']
         target_angles = [home_j2]*len(joint_names)
-        target_angles[0] = -0.3
+        target_angles[0] = extend_j2
 
         self.setMotorTargetJointPosition('leg1_j2', target_angles[0])
         self.setMotorTargetJointPosition('leg3_j2', target_angles[1])
@@ -147,7 +145,7 @@ class HexapodControl(RobotControl):
         # rotate legs 2, 3, 5, 6
         # fold leg 1
         joint_names = ['hexa_leg1_j2', 'hexa_leg1_j3', 'hexa_leg2_j1', 'hexa_leg3_j1', 'hexa_leg4_j2', 'hexa_leg4_j3','hexa_leg5_j1', 'hexa_leg6_j1']
-        target_angles = [home_j2, home_j3, angle_change, home_j1, -0.3, 1.5,home_j1, -angle_change]
+        target_angles = [home_j2, home_j3, angle_change, home_j1, extend_j2, extend_j3, home_j1, -angle_change]
 
         self.setMotorTargetJointPosition('leg1_j2', target_angles[0])
         self.setMotorTargetJointPosition('leg1_j3', target_angles[1])
@@ -160,26 +158,24 @@ class HexapodControl(RobotControl):
 
         self.next_move(joint_names, target_angles)
 
+        ########################################################################
+
         # raise legs 2,4 and 6
-        joint_names = ['hexa_leg2_j2', 'hexa_leg4_j2', 'hexa_leg6_j2']
-        target_angles = [target_rai_j2]*len(joint_names)
-
-        self.setMotorTargetJointPosition('leg2_j2', target_angles[0])
-        self.setMotorTargetJointPosition('leg4_j2', target_angles[1])
-        self.setMotorTargetJointPosition('leg6_j2', target_angles[2])
-
-        self.next_move(joint_names, target_angles)
-
         # move legs 2, 4 and 6 back to home position
-        joint_names = ['hexa_leg2_j1', 'hexa_leg4_j3', 'hexa_leg6_j1']
-        target_angles = [home_j1]*len(joint_names)
-        target_angles[1] = home_j3
+
+        joint_names = ['hexa_leg2_j1', 'hexa_leg2_j2', 'hexa_leg4_j2', 'hexa_leg4_j3', 'hexa_leg6_j1', 'hexa_leg6_j2']
+        target_angles = [home_j1, raise_j2, raise_j2, home_j3, home_j1, raise_j2]
 
         self.setMotorTargetJointPosition('leg2_j1', target_angles[0])
-        self.setMotorTargetJointPosition('leg4_j3', target_angles[1])
-        self.setMotorTargetJointPosition('leg6_j1', target_angles[2])
+        self.setMotorTargetJointPosition('leg2_j2', target_angles[1])
+        self.setMotorTargetJointPosition('leg4_j2', target_angles[2])
+        self.setMotorTargetJointPosition('leg4_j3', target_angles[3])
+        self.setMotorTargetJointPosition('leg6_j1', target_angles[4])
+        self.setMotorTargetJointPosition('leg6_j2', target_angles[5])
 
         self.next_move(joint_names, target_angles)
+
+        ##########################################################################
 
         # lower legs 2 and 6 back to home position
         joint_names = ['hexa_leg2_j2', 'hexa_leg4_j2', 'hexa_leg6_j2']
@@ -191,8 +187,6 @@ class HexapodControl(RobotControl):
 
         self.next_move(joint_names, target_angles)
         
-
-
 
     # function that rotates the hexapod by one step size (pi/6 radians) in a given direction
     def turn(self, cw):
