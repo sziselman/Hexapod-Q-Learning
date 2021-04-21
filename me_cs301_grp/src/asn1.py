@@ -57,7 +57,7 @@ class HexapodControl(RobotControl):
             # self.hold_neutral() #remove if not necessary
             # ---- add your code for a particular behavior here ----- #
 
-            self.step()
+            self.turn(False)
 
             time.sleep(0.1) # change the sleep time to whatever is the appropriate control rate for simulation
 
@@ -87,13 +87,13 @@ class HexapodControl(RobotControl):
         self.setMotorTargetJointPosition('leg6_j2', -0.5)
         self.setMotorTargetJointPosition('leg6_j3', 2.09)
 
-    def next_move(self, joint_names, target_angles):
+    def next_move(self, joint_ids, target_angles):
 
         flag = False
         while (not flag):
             flag = True
-            for i in range(len(joint_names)):
-                flag *= (abs(self.getMotorCurrentJointPosition(joint_names[i]) - target_angles[i]) < 1e-4)
+            for i in range(len(joint_ids)):
+                flag *= (abs(self.getMotorCurrentJointPosition("hexa_" + joint_ids[i]) - target_angles[i]) < 1e-4)
 
 
     # def walk_forward(self):
@@ -101,183 +101,137 @@ class HexapodControl(RobotControl):
     # function that makes the hexapod take one step forward
     def step(self):
 
-        home_j1 = 0.0
-        home_j2 = -0.50
-        home_j3 = 2.09
+        # home position joint 1, 2, 3
+        home = [0.0, -0.50, 2.09]
 
-        extend_j3 = 0.55
-        extend_j2 = 0.18
-        angle_change = math.pi/3
+        # extended position joint 1, 2, 3 (only used for legs 1 and 4)
+        extend = [0.0, 0.18, 0.55]
 
         raise_j2 = -1.0
-        target_rai_j2 = -1.0
+        rotate_j1 = math.pi/3
         
 
         # raise legs 1, 3, 5 (joint 2)
+        raise_t1_ids = ['leg1_j2', 'leg3_j2', 'leg5_j2']
+
+        for i in range(len(raise_t1_ids)):
+            self.setMotorTargetJointPosition(raise_t1_ids[i], raise_j2)
+        self.next_move(raise_t1_ids, [raise_j2]*len(raise_t1_ids))
+
         # rotate legs 3 and 5 (joint 1)
         # extend leg 1 (joint 3)
+        rotate_extend_t1_ids = ['leg1_j3', 'leg3_j1', 'leg5_j1']
 
-        joint_names = ['hexa_leg1_j2', 'hexa_leg1_j3', 'hexa_leg3_j1', 'hexa_leg3_j2', 'hexa_leg5_j1', 'hexa_leg5_j2']
-        target_angles = [raise_j2, extend_j3, -angle_change, raise_j2, angle_change, raise_j2]
+        rotate_extend_angles = [extend[2], -rotate_j1, rotate_j1]
 
-        self.setMotorTargetJointPosition('leg1_j2', target_angles[0])
-        self.setMotorTargetJointPosition('leg1_j3', target_angles[1])
-        self.setMotorTargetJointPosition('leg3_j2', target_angles[3])
-        self.setMotorTargetJointPosition('leg3_j1', target_angles[2])
-        self.setMotorTargetJointPosition('leg5_j2', target_angles[5])
-        self.setMotorTargetJointPosition('leg5_j1', target_angles[4])
+        for i in range(len(rotate_extend_t1_ids)):
+            self.setMotorTargetJointPosition(rotate_extend_t1_ids[i], rotate_extend_angles[i])
+        self.next_move(rotate_extend_t1_ids, rotate_extend_angles)
 
-        self.next_move(joint_names, target_angles)
+        ########################################################################
 
-        #####################################################################
+        # lower 3 and 5
+        # lowering to extended position leg 1
 
-        # lower legs 3 and 5
-        joint_names = ['hexa_leg1_j2', 'hexa_leg3_j2', 'hexa_leg5_j2']
-        target_angles = [home_j2]*len(joint_names)
-        target_angles[0] = extend_j2
+        lower_t1_angles = [extend[1], home[1], home[1]]
 
-        self.setMotorTargetJointPosition('leg1_j2', target_angles[0])
-        self.setMotorTargetJointPosition('leg3_j2', target_angles[1])
-        self.setMotorTargetJointPosition('leg5_j2', target_angles[2])
-
-        self.next_move(joint_names, target_angles)
+        for i in range(len(raise_t1_ids)):
+            self.setMotorTargetJointPosition(raise_t1_ids[i], lower_t1_angles[i])
+        
+        self.next_move(raise_t1_ids, lower_t1_angles)
 
         # rotate legs 2, 3, 5, 6
-        # fold leg 1
-        joint_names = ['hexa_leg1_j2', 'hexa_leg1_j3', 'hexa_leg2_j1', 'hexa_leg3_j1', 'hexa_leg4_j2', 'hexa_leg4_j3','hexa_leg5_j1', 'hexa_leg6_j1']
-        target_angles = [home_j2, home_j3, angle_change, home_j1, extend_j2, extend_j3, home_j1, -angle_change]
+        # return leg 1 to home
+        # extend leg 4
+        transition_ids = ['leg1_j2', 'leg1_j3', 'leg2_j1', 'leg3_j1', 'leg4_j2', 'leg4_j3', 'leg5_j1', 'leg6_j1']
+        transition_angles = [home[1], home[2], rotate_j1, home[0], extend[1], extend[2], home[0], -rotate_j1]
 
-        self.setMotorTargetJointPosition('leg1_j2', target_angles[0])
-        self.setMotorTargetJointPosition('leg1_j3', target_angles[1])
-        self.setMotorTargetJointPosition('leg2_j1', target_angles[2])
-        self.setMotorTargetJointPosition('leg3_j1', target_angles[3])
-        self.setMotorTargetJointPosition('leg4_j2', target_angles[4])
-        self.setMotorTargetJointPosition('leg4_j3', target_angles[5])
-        self.setMotorTargetJointPosition('leg5_j1', target_angles[6])
-        self.setMotorTargetJointPosition('leg6_j1', target_angles[7])
+        for i in range(len(transition_ids)):
+            self.setMotorTargetJointPosition(transition_ids[i], transition_angles[i])
 
-        self.next_move(joint_names, target_angles)
+        self.next_move(transition_ids, transition_angles)
 
         ########################################################################
 
         # raise legs 2,4 and 6
+        raise_t2_ids = ['leg2_j2', 'leg4_j2', 'leg6_j2']
+        
+        for i in range(len(raise_t2_ids)):
+            self.setMotorTargetJointPosition(raise_t2_ids[i], raise_j2)
+
+        self.next_move(raise_t2_ids, [raise_j2]*len(raise_t2_ids))
+
         # move legs 2, 4 and 6 back to home position
+        rotate_fold_t2_ids = ['leg2_j1', 'leg4_j3', 'leg6_j1']
+        rotate_fold_angles = [home[0], home[2], home[0]]
 
-        joint_names = ['hexa_leg2_j1', 'hexa_leg2_j2', 'hexa_leg4_j2', 'hexa_leg4_j3', 'hexa_leg6_j1', 'hexa_leg6_j2']
-        target_angles = [home_j1, raise_j2, raise_j2, home_j3, home_j1, raise_j2]
+        for i in range(len(rotate_fold_t2_ids)):
+            self.setMotorTargetJointPosition(rotate_fold_t2_ids[i], rotate_fold_angles[i])
+        
+        self.next_move(rotate_fold_t2_ids, rotate_fold_angles)
 
-        self.setMotorTargetJointPosition('leg2_j1', target_angles[0])
-        self.setMotorTargetJointPosition('leg2_j2', target_angles[1])
-        self.setMotorTargetJointPosition('leg4_j2', target_angles[2])
-        self.setMotorTargetJointPosition('leg4_j3', target_angles[3])
-        self.setMotorTargetJointPosition('leg6_j1', target_angles[4])
-        self.setMotorTargetJointPosition('leg6_j2', target_angles[5])
-
-        self.next_move(joint_names, target_angles)
-
-        ##########################################################################
+        ########################################################################
 
         # lower legs 2 and 6 back to home position
-        joint_names = ['hexa_leg2_j2', 'hexa_leg4_j2', 'hexa_leg6_j2']
-        target_angles = [home_j2]*len(joint_names)
 
-        self.setMotorTargetJointPosition('leg2_j2', target_angles[0])
-        self.setMotorTargetJointPosition('leg4_j2', target_angles[1])
-        self.setMotorTargetJointPosition('leg6_j2', target_angles[2])
+        lower_t2_angles = [home[1], home[1], home[1]]
 
-        self.next_move(joint_names, target_angles)
+        for i in range(len(raise_t2_ids)):
+            self.setMotorTargetJointPosition(raise_t2_ids[i], home[1])
+        
+        self.next_move(raise_t2_ids, [home[1]]*len(raise_t2_ids))
         
 
     # function that rotates the hexapod by one step size (pi/6 radians) in a given direction
     def turn(self, cw):
 
-        target_rai_j2 = -1
-        target_res_j2 = -0.50
-
         if (cw == True):
-            angle_change = -math.pi/6
+            rotate_j1 = -math.pi/6
         else:
-            angle_change = math.pi/6
+            rotate_j1 = math.pi/6
+
+        raise_j2 = -1.0
+
+        home = [0.0, -0.5, 2.09]
+
+        tripod1_ids = ['leg1_j2', 'leg3_j2', 'leg5_j2']
+        rotate_ids = ['leg1_j1', 'leg2_j1', 'leg3_j1', 'leg4_j1', 'leg5_j1', 'leg6_j1']
+        tripod2_ids = ['leg2_j2', 'leg4_j2', 'leg6_j2']
 
         # raise legs 1, 3, 5
-
-        joint_names = ['hexa_leg1_j2', 'hexa_leg3_j2', 'hexa_leg5_j2']
-        target_angles = [target_rai_j2]*len(joint_names)
-
-        self.setMotorTargetJointPosition('leg1_j2', target_rai_j2)
-        self.setMotorTargetJointPosition('leg3_j2', target_rai_j2)
-        self.setMotorTargetJointPosition('leg5_j2', target_rai_j2)
-
-        self.next_move(joint_names, target_angles)
+        for i in range(len(tripod1_ids)):
+            self.setMotorTargetJointPosition(tripod1_ids[i], raise_j2)
+        self.next_move(tripod1_ids, [raise_j2]*len(tripod1_ids))
 
         # rotate legs 1, 3, 5
-        joint_names = ['hexa_leg1_j1', 'hexa_leg2_j1', 'hexa_leg3_j1', 'hexa_leg4_j1', 'hexa_leg5_j1', 'hexa_leg6_j1']
-        target_angles = [0]*len(joint_names)
-        target_angles[0] = self.getMotorCurrentJointPosition(joint_names[0]) + angle_change
-        target_angles[1] = self.getMotorCurrentJointPosition(joint_names[1]) - angle_change
-        target_angles[2] = self.getMotorCurrentJointPosition(joint_names[2]) + angle_change
-        target_angles[3] = self.getMotorCurrentJointPosition(joint_names[3]) - angle_change
-        target_angles[4] = self.getMotorCurrentJointPosition(joint_names[4]) + angle_change
-        target_angles[5] = self.getMotorCurrentJointPosition(joint_names[5]) - angle_change
+        rotate_t1_angles = [rotate_j1, -rotate_j1, rotate_j1, -rotate_j1, rotate_j1, -rotate_j1]
 
-        self.setMotorTargetJointPosition('leg1_j1', target_angles[0])
-        self.setMotorTargetJointPosition('leg2_j1', target_angles[1])
-        self.setMotorTargetJointPosition('leg3_j1', target_angles[2])
-        self.setMotorTargetJointPosition('leg4_j1', target_angles[3])
-        self.setMotorTargetJointPosition('leg5_j1', target_angles[4])
-        self.setMotorTargetJointPosition('leg6_j1', target_angles[5])
+        for i in range(len(rotate_ids)):
+            self.setMotorTargetJointPosition(rotate_ids[i], rotate_t1_angles[i])
 
-        self.next_move(joint_names, target_angles)
+        self.next_move(rotate_ids, rotate_t1_angles)
 
         # lower legs 1, 3, 5
-        joint_names = ['hexa_leg1_j2', 'hexa_leg3_j2', 'hexa_leg5_j2']
-        target_angles = [target_res_j2]*len(joint_names)
-
-        self.setMotorTargetJointPosition('leg1_j2', target_res_j2)
-        self.setMotorTargetJointPosition('leg3_j2', target_res_j2)
-        self.setMotorTargetJointPosition('leg5_j2', target_res_j2)
-
-        self.next_move(joint_names, target_angles)
+        for i in range(len(tripod1_ids)):
+            self.setMotorTargetJointPosition(tripod1_ids[i], home[1])
+        self.next_move(tripod1_ids, [home[1]]*len(tripod1_ids))
 
         # raise legs 2, 4, 6
-
-        joint_names = ['hexa_leg2_j2', 'hexa_leg4_j2', 'hexa_leg6_j2']
-        target_angles = [target_rai_j2]*len(joint_names)
-
-        self.setMotorTargetJointPosition('leg2_j2', target_rai_j2)
-        self.setMotorTargetJointPosition('leg4_j2', target_rai_j2)
-        self.setMotorTargetJointPosition('leg6_j2', target_rai_j2)
-
-        self.next_move(joint_names, target_angles)
-
+        for i in range(len(tripod2_ids)):
+            self.setMotorTargetJointPosition(tripod2_ids[i], raise_j2)
+        self.next_move(tripod2_ids, [raise_j2]*len(tripod2_ids))
+       
         # rotate legs 2, 4, 6
-        joint_names = ['hexa_leg1_j1', 'hexa_leg2_j1', 'hexa_leg3_j1', 'hexa_leg4_j1', 'hexa_leg5_j1', 'hexa_leg6_j1']
-        target_angles = [0]*len(joint_names)
-        target_angles[0] = self.getMotorCurrentJointPosition(joint_names[0]) - angle_change
-        target_angles[1] = self.getMotorCurrentJointPosition(joint_names[1]) + angle_change
-        target_angles[2] = self.getMotorCurrentJointPosition(joint_names[2]) - angle_change
-        target_angles[3] = self.getMotorCurrentJointPosition(joint_names[3]) + angle_change
-        target_angles[4] = self.getMotorCurrentJointPosition(joint_names[4]) - angle_change
-        target_angles[5] = self.getMotorCurrentJointPosition(joint_names[5]) + angle_change
+        rotate_t2_angles = [-rotate_j1, rotate_j1, -rotate_j1, rotate_j1, -rotate_j1, rotate_j1]
 
-        self.setMotorTargetJointPosition('leg1_j1', target_angles[0])
-        self.setMotorTargetJointPosition('leg2_j1', target_angles[1])
-        self.setMotorTargetJointPosition('leg3_j1', target_angles[2])
-        self.setMotorTargetJointPosition('leg4_j1', target_angles[3])
-        self.setMotorTargetJointPosition('leg5_j1', target_angles[4])
-        self.setMotorTargetJointPosition('leg6_j1', target_angles[5])
-
-        self.next_move(joint_names, target_angles)
+        for i in range(len(rotate_ids)):
+            self.setMotorTargetJointPosition(rotate_ids[i], rotate_t2_angles[i])
+        self.next_move(rotate_ids, rotate_t2_angles)
 
         # lower legs 2, 4, 6
-        joint_names = ['hexa_leg2_j2', 'hexa_leg4_j2', 'hexa_leg6_j2']
-        target_angles = [target_res_j2]*len(joint_names)
-
-        self.setMotorTargetJointPosition('leg2_j2', target_res_j2)
-        self.setMotorTargetJointPosition('leg4_j2', target_res_j2)
-        self.setMotorTargetJointPosition('leg6_j2', target_res_j2)
-
-        self.next_move(joint_names, target_angles)
+        for i in range(len(tripod2_ids)):
+            self.setMotorTargetJointPosition(tripod2_ids[i], home[1])
+        self.setMotorTargetJointPosition(tripod2_ids, [home[1]]*len(tripod2_ids))
 
     def turn_left90(self):
         i = 0
