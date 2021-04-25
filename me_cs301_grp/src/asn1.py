@@ -29,6 +29,13 @@ self.joint_states.name
 
 '''
 
+j1_limits = [-1.36, 0.415]
+j2_limits = [-1.30, 0.52]
+j3_limits = [-3.14, 3.14]
+
+# global rotate_j1 = math.pi/3
+rotate_j1 = 0.2
+
 def quat_to_euler(x, y, z, w):
     t0 = +2.0 * (w * x + y * z)
     t1 = +1.0 - 2.0 * (x * x + y * y)
@@ -52,12 +59,36 @@ class HexapodControl(RobotControl):
         self.hold_neutral()
         time.sleep(2.0)
 
+        curr_error = 0
+        prev_error = 0
+        tot_error = 0
+        dist = 0.20
+
         #main control loop
         while not rospy.is_shutdown(): 
             # self.hold_neutral() #remove if not necessary
             # ---- add your code for a particular behavior here ----- #
 
-            self.turn(False)
+            # if left sensor reading (wall to the left)
+            if self.getSensorValue('left') > 0:
+                print(self.getSensorValue('left'))
+                curr_error = self.getSensorValue('left') - dist
+                tot_error += curr_error
+                u = self.pid_control(curr_error, prev_error, tot_error)
+            elif self.getSensorValue('right') > 0:
+                curr_error = self.getSensorValue('right') - dist
+                tot_error += curr_error
+                u = -self.pid_control(curr_error, prev_error, tot_error)
+            else:
+                curr_error = 0
+                u = 0
+            
+            if self.getMotorCurrentJointPosition('hexa_leg5_j1') + rotate_j1 + u > j1_limits[1]:
+                u = j1_limits[1] - self.getMotorCurrentJointPosition('hexa_leg5_j1') - rotate_j1
+
+
+            self.step(u)
+            prev_error = curr_error
 
             time.sleep(0.1) # change the sleep time to whatever is the appropriate control rate for simulation
 
@@ -95,11 +126,19 @@ class HexapodControl(RobotControl):
             for i in range(len(joint_ids)):
                 flag *= (abs(self.getMotorCurrentJointPosition("hexa_" + joint_ids[i]) - target_angles[i]) < 1e-4)
 
+    def pid_control(self, curr_error, prev_error, tot_error):
+        p = 5.0
+        i = 0.0
+        d = 0.1
+        dt = 0.05
 
-    # def walk_forward(self):
+        u = (p * curr_error) + (i * tot_error * dt) + (d * (curr_error - prev_error) / dt)
+        return u
 
     # function that makes the hexapod take one step forward
-    def step(self):
+    def step(self, control):
+        print("the control is")
+        print(control)
 
         # home position joint 1, 2, 3
         home = [0.0, -0.50, 2.09]
@@ -108,78 +147,76 @@ class HexapodControl(RobotControl):
         extend = [0.0, 0.18, 0.55]
 
         raise_j2 = -1.0
-        rotate_j1 = math.pi/3
+        # rotate_j1 = math.pi/3
+        # rotate_j1 = 0.2
         
+        tripod1_j1_ids = ['leg1_j1', 'leg3_j1', 'leg5_j1']
+        tripod1_j2_ids = ['leg1_j2', 'leg3_j2', 'leg5_j2']
+
+        tripod2_j1_ids = ['leg2_j1', 'leg4_j1', 'leg6_j1']
+        tripod2_j2_ids = ['leg2_j2', 'leg4_j2', 'leg6_j2']
+
+        tripod1_step_ids = ['leg1_j3', 'leg3_j1', 'leg5_j1']
+        tripod2_step_ids = ['leg2_j1', 'leg4_j3', 'leg6_j1']
+        transition_ids = ['leg1_j2', 'leg1_j3', 'leg2_j1', 'leg3_j1', 'leg4_j2', 'leg4_j3', 'leg5_j1', 'leg6_j1', 'leg1_j1']
 
         # raise legs 1, 3, 5 (joint 2)
-        raise_t1_ids = ['leg1_j2', 'leg3_j2', 'leg5_j2']
+        for i in range(len(tripod1_j2_ids)):
+            self.setMotorTargetJointPosition(tripod1_j2_ids[i], raise_j2)
+        self.next_move(tripod1_j2_ids, [raise_j2]*len(tripod1_j2_ids))
 
-        for i in range(len(raise_t1_ids)):
-            self.setMotorTargetJointPosition(raise_t1_ids[i], raise_j2)
-        self.next_move(raise_t1_ids, [raise_j2]*len(raise_t1_ids))
+        # rotate legs 1, 3, 5 (joint 1)
+        rotate_angles = [self.getMotorCurrentJointPosition('hexa_leg1_j1') + control,
+                         self.getMotorCurrentJointPosition('hexa_leg3_j1') -rotate_j1 + control,
+                         self.getMotorCurrentJointPosition('hexa_leg5_j1') +rotate_j1 + control]
+        for i in range(len(tripod1_j1_ids)):
+            self.setMotorTargetJointPosition(tripod1_j1_ids[i], rotate_angles[i])
+        self.next_move(tripod1_j1_ids, rotate_angles)
 
-        # rotate legs 3 and 5 (joint 1)
-        # extend leg 1 (joint 3)
-        rotate_extend_t1_ids = ['leg1_j3', 'leg3_j1', 'leg5_j1']
-
-        rotate_extend_angles = [extend[2], -rotate_j1, rotate_j1]
-
-        for i in range(len(rotate_extend_t1_ids)):
-            self.setMotorTargetJointPosition(rotate_extend_t1_ids[i], rotate_extend_angles[i])
-        self.next_move(rotate_extend_t1_ids, rotate_extend_angles)
-
-        ########################################################################
+        self.setMotorTargetJointPosition('leg1_j3', extend[2])
+        self.next_move(['leg1_j3'], [extend[2]])
 
         # lower 3 and 5
         # lowering to extended position leg 1
-
         lower_t1_angles = [extend[1], home[1], home[1]]
-
-        for i in range(len(raise_t1_ids)):
-            self.setMotorTargetJointPosition(raise_t1_ids[i], lower_t1_angles[i])
-        
-        self.next_move(raise_t1_ids, lower_t1_angles)
+        for i in range(len(tripod1_j2_ids)):
+            self.setMotorTargetJointPosition(tripod1_j2_ids[i], lower_t1_angles[i])
+        self.next_move(tripod1_j2_ids, lower_t1_angles)
 
         # rotate legs 2, 3, 5, 6
         # return leg 1 to home
         # extend leg 4
-        transition_ids = ['leg1_j2', 'leg1_j3', 'leg2_j1', 'leg3_j1', 'leg4_j2', 'leg4_j3', 'leg5_j1', 'leg6_j1']
-        transition_angles = [home[1], home[2], rotate_j1, home[0], extend[1], extend[2], home[0], -rotate_j1]
-
+        transition_angles = [home[1],
+                             home[2],
+                             rotate_j1 - control,
+                             home[0],
+                             extend[1],
+                             extend[2],
+                             home[0],
+                             -rotate_j1 - control,
+                             home[0]]
         for i in range(len(transition_ids)):
             self.setMotorTargetJointPosition(transition_ids[i], transition_angles[i])
-
         self.next_move(transition_ids, transition_angles)
 
-        ########################################################################
+        self.setMotorTargetJointPosition('leg1_j1', home[0])
+        self.next_move(['leg1_j1'], [home[0]])
 
         # raise legs 2,4 and 6
-        raise_t2_ids = ['leg2_j2', 'leg4_j2', 'leg6_j2']
-        
-        for i in range(len(raise_t2_ids)):
-            self.setMotorTargetJointPosition(raise_t2_ids[i], raise_j2)
-
-        self.next_move(raise_t2_ids, [raise_j2]*len(raise_t2_ids))
+        for i in range(len(tripod2_j2_ids)):
+            self.setMotorTargetJointPosition(tripod2_j2_ids[i], raise_j2)
+        self.next_move(tripod2_j2_ids, [raise_j2]*len(tripod2_j2_ids))
 
         # move legs 2, 4 and 6 back to home position
-        rotate_fold_t2_ids = ['leg2_j1', 'leg4_j3', 'leg6_j1']
         rotate_fold_angles = [home[0], home[2], home[0]]
-
-        for i in range(len(rotate_fold_t2_ids)):
-            self.setMotorTargetJointPosition(rotate_fold_t2_ids[i], rotate_fold_angles[i])
-        
-        self.next_move(rotate_fold_t2_ids, rotate_fold_angles)
-
-        ########################################################################
+        for i in range(len(tripod2_step_ids)):
+            self.setMotorTargetJointPosition(tripod2_step_ids[i], rotate_fold_angles[i])
+        self.next_move(tripod2_step_ids, rotate_fold_angles)
 
         # lower legs 2 and 6 back to home position
-
-        lower_t2_angles = [home[1], home[1], home[1]]
-
-        for i in range(len(raise_t2_ids)):
-            self.setMotorTargetJointPosition(raise_t2_ids[i], home[1])
-        
-        self.next_move(raise_t2_ids, [home[1]]*len(raise_t2_ids))
+        for i in range(len(tripod2_j2_ids)):
+            self.setMotorTargetJointPosition(tripod2_j2_ids[i], home[1])
+        self.next_move(tripod2_j2_ids, [home[1]]*len(tripod2_j2_ids))
         
 
     # function that rotates the hexapod by one step size (pi/6 radians) in a given direction
