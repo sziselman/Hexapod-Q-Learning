@@ -29,12 +29,11 @@ self.joint_states.name
 
 '''
 
-j1_limits = [-1.36, 0.415]
+j1_limits = [-1.0, 1.0]
 j2_limits = [-1.30, 0.52]
 j3_limits = [-3.14, 3.14]
 
-# global rotate_j1 = math.pi/3
-rotate_j1 = 0.2
+step = 0.55
 
 def quat_to_euler(x, y, z, w):
     t0 = +2.0 * (w * x + y * z)
@@ -52,6 +51,8 @@ def quat_to_euler(x, y, z, w):
      
     return roll_x, pitch_y, yaw_z # in radians
 
+
+
 class HexapodControl(RobotControl):
     def __init__(self):
         super(HexapodControl, self).__init__(robot_type='hexapod')
@@ -62,32 +63,75 @@ class HexapodControl(RobotControl):
         curr_error = 0
         prev_error = 0
         tot_error = 0
-        dist = 0.20
+        dist = 0.35
+
+        prevWall = 'none'
 
         #main control loop
         while not rospy.is_shutdown(): 
             # self.hold_neutral() #remove if not necessary
             # ---- add your code for a particular behavior here ----- #
 
-            # if left sensor reading (wall to the left)
-            if self.getSensorValue('left') > 0:
-                print(self.getSensorValue('left'))
-                curr_error = self.getSensorValue('left') - dist
-                tot_error += curr_error
-                u = self.pid_control(curr_error, prev_error, tot_error)
-            elif self.getSensorValue('right') > 0:
-                curr_error = self.getSensorValue('right') - dist
-                tot_error += curr_error
-                u = -self.pid_control(curr_error, prev_error, tot_error)
+            # if front sensor is within turning range
+            if self.getSensorValue('front') > 0 and self.getSensorValue('front') < 0.275:
+                # readings only from left sensor
+                if self.getSensorValue('left') > 0 and self.getSensorValue('right') < 0:
+                    self.turn_right90()
+                    u = 0
+                # readings only from right sensor
+                elif self.getSensorValue('right') > 0 and self.getSensorValue('left') < 0:
+                    self.turn_left90()
+                    u = 0
+                # readings from both sensors
+                elif self.getSensorValue('right') > 0 and self.getSensorValue('left') > 0:
+                    self.turn_around()
+                    u = 0
+                else:
+                    self.turn_right90()
+                    u = 0
+            # elif self.getSensorValue('front') < 0:
             else:
-                curr_error = 0
-                u = 0
+                # readings only from left sensor
+                if self.getSensorValue('left') > 0 and self.getSensorValue('right') < 0:
+                    print(self.getSensorValue('left'))
+                    curr_error = self.getSensorValue('left') - dist
+                    tot_error += curr_error
+                    u = self.pid_control(curr_error, prev_error, tot_error)
+                # readings only from right sensor
+                elif self.getSensorValue('right') > 0 and self.getSensorValue('left') < 0:
+                    curr_error = self.getSensorValue('right') - dist
+                    tot_error += curr_error
+                    u = -self.pid_control(curr_error, prev_error, tot_error)
+                    prevWall = 'right'
+                elif self.getSensorValue('left') > 0 and self.getSensorValue('right') > 0:
+                    if prevWall == 'left':
+                        curr_error = self.getSensorValue('left') - dist
+                        tot_error += curr_error
+                        u = self.pid_control(curr_error, prev_error, tot_error)
+                    elif prevWall == 'right':
+                        curr_error = self.getSensorValue('right') - dist
+                        tot_error += curr_error
+                        u = -self.pid_control(curr_error, prev_error, tot_error)
+                    else:
+                        curr_error = self.getSensorValue('left') - dist
+                        tot_error += curr_error
+                        u = self.pid_control(curr_error, prev_error, tot_error)
+                else:
+                    curr_error = 0
+                    u = 0
             
-            if self.getMotorCurrentJointPosition('hexa_leg5_j1') + rotate_j1 + u > j1_limits[1]:
-                u = j1_limits[1] - self.getMotorCurrentJointPosition('hexa_leg5_j1') - rotate_j1
-
+            # check for joint limits
+            if u > 0 and step + u > j1_limits[1]:
+                print("MAX CONTROLS!")
+                u = j1_limits[1] - step
+            elif u < 0 and -step + u < j1_limits[0]:
+                print("MAX_CONTROLS!!")
+                u = j1_limits[0] + step
+            else:
+                pass
 
             self.step(u)
+
             prev_error = curr_error
 
             time.sleep(0.1) # change the sleep time to whatever is the appropriate control rate for simulation
@@ -127,9 +171,9 @@ class HexapodControl(RobotControl):
                 flag *= (abs(self.getMotorCurrentJointPosition("hexa_" + joint_ids[i]) - target_angles[i]) < 1e-4)
 
     def pid_control(self, curr_error, prev_error, tot_error):
-        p = 5.0
+        p = 2.5
         i = 0.0
-        d = 0.1
+        d = 0.75
         dt = 0.05
 
         u = (p * curr_error) + (i * tot_error * dt) + (d * (curr_error - prev_error) / dt)
@@ -158,7 +202,7 @@ class HexapodControl(RobotControl):
 
         tripod1_step_ids = ['leg1_j3', 'leg3_j1', 'leg5_j1']
         tripod2_step_ids = ['leg2_j1', 'leg4_j3', 'leg6_j1']
-        transition_ids = ['leg1_j2', 'leg1_j3', 'leg2_j1', 'leg3_j1', 'leg4_j2', 'leg4_j3', 'leg5_j1', 'leg6_j1', 'leg1_j1']
+        transition_ids = ['leg1_j2', 'leg1_j3', 'leg2_j1', 'leg3_j1', 'leg4_j1', 'leg4_j2', 'leg4_j3', 'leg5_j1', 'leg6_j1', 'leg1_j1']
 
         # raise legs 1, 3, 5 (joint 2)
         for i in range(len(tripod1_j2_ids)):
@@ -166,34 +210,33 @@ class HexapodControl(RobotControl):
         self.next_move(tripod1_j2_ids, [raise_j2]*len(tripod1_j2_ids))
 
         # rotate legs 1, 3, 5 (joint 1)
-        rotate_angles = [self.getMotorCurrentJointPosition('hexa_leg1_j1') + control,
-                         self.getMotorCurrentJointPosition('hexa_leg3_j1') -rotate_j1 + control,
-                         self.getMotorCurrentJointPosition('hexa_leg5_j1') +rotate_j1 + control]
+        rotate_angles = [control,
+                         -step + control,
+                         step + control]
         for i in range(len(tripod1_j1_ids)):
             self.setMotorTargetJointPosition(tripod1_j1_ids[i], rotate_angles[i])
         self.next_move(tripod1_j1_ids, rotate_angles)
 
-        self.setMotorTargetJointPosition('leg1_j3', extend[2])
-        self.next_move(['leg1_j3'], [extend[2]])
-
         # lower 3 and 5
         # lowering to extended position leg 1
-        lower_t1_angles = [extend[1], home[1], home[1]]
-        for i in range(len(tripod1_j2_ids)):
-            self.setMotorTargetJointPosition(tripod1_j2_ids[i], lower_t1_angles[i])
-        self.next_move(tripod1_j2_ids, lower_t1_angles)
+        lower_t1_angles = [extend[2], extend[1], home[1], home[1]]
+        id_list = ['leg1_j3'] + tripod1_j2_ids
+        for i in range(len(id_list)):
+            self.setMotorTargetJointPosition(id_list[i], lower_t1_angles[i])
+        self.next_move(id_list, lower_t1_angles)
 
         # rotate legs 2, 3, 5, 6
         # return leg 1 to home
         # extend leg 4
         transition_angles = [home[1],
                              home[2],
-                             rotate_j1 - control,
+                             step - control,
                              home[0],
+                             -control,
                              extend[1],
                              extend[2],
                              home[0],
-                             -rotate_j1 - control,
+                             -step - control,
                              home[0]]
         for i in range(len(transition_ids)):
             self.setMotorTargetJointPosition(transition_ids[i], transition_angles[i])
@@ -208,10 +251,13 @@ class HexapodControl(RobotControl):
         self.next_move(tripod2_j2_ids, [raise_j2]*len(tripod2_j2_ids))
 
         # move legs 2, 4 and 6 back to home position
-        rotate_fold_angles = [home[0], home[2], home[0]]
-        for i in range(len(tripod2_step_ids)):
-            self.setMotorTargetJointPosition(tripod2_step_ids[i], rotate_fold_angles[i])
-        self.next_move(tripod2_step_ids, rotate_fold_angles)
+        id_list2 = ['leg4_j1'] + tripod2_step_ids
+
+        rotate_fold_angles = [home[0], home[0], home[2], home[0]]
+
+        for i in range(len(id_list2)):
+            self.setMotorTargetJointPosition(id_list2[i], rotate_fold_angles[i])
+        self.next_move(id_list2, rotate_fold_angles)
 
         # lower legs 2 and 6 back to home position
         for i in range(len(tripod2_j2_ids)):
@@ -223,9 +269,9 @@ class HexapodControl(RobotControl):
     def turn(self, cw):
 
         if (cw == True):
-            rotate_j1 = -math.pi/6
+            rotate_j1 = -math.pi/12
         else:
-            rotate_j1 = math.pi/6
+            rotate_j1 = math.pi/12
 
         raise_j2 = -1.0
 
