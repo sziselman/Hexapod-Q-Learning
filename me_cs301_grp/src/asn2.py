@@ -69,7 +69,7 @@ class HexapodControl(RobotControl):
             # ---- add your code for a particular behavior here ----- #
 
             start = Cell((0, 0))
-            goal = Cell((3, 7))
+            goal = Cell((1, 1))
 
             path = self.a_star_search(map, start, goal)
             sequence = self.command_sequence(path)
@@ -116,9 +116,9 @@ class HexapodControl(RobotControl):
                 flag *= (abs(self.getMotorCurrentJointPosition("hexa_" + joint_ids[i]) - target_angles[i]) < 1e-4)
 
     def pid_control(self, curr_error, prev_error, tot_error):
-        p = 0.10
+        p = 0.05
         i = 0.0
-        d = 0.10
+        d = 0.0
         dt = 0.05
 
         u = (p * curr_error) + (i * tot_error * dt) + (d * (curr_error - prev_error) / dt)
@@ -346,28 +346,22 @@ class HexapodControl(RobotControl):
                 curr_error = self.getSensorValue('left') - dist
                 u = self.pid_control(curr_error, prev_error, tot_error)
 
-                print('distance from wall is ', self.getSensorValue('left'), 'control is ', u)
-                
             elif self.getSensorValue('right') > 0 and self.getSensorValue('left') < 0:
                 curr_error = self.getSensorValue('right') - dist
                 u = -self.pid_control(curr_error, prev_error, tot_error)
 
-                print('distance from wall is ', self.getSensorValue('right'), 'control is ', u)
-                
             elif self.getSensorValue('left') > 0 and self.getSensorValue('right') > 0:
                 curr_error = self.getSensorValue('left') - dist
                 u = self.pid_control(curr_error, prev_error, tot_error)
 
-                print('distance from wall is ', self.getSensorValue('left'), 'control is ', u)
-                
             else:
                 u = 0
 
             # check for joint limits!!
-            if u > 0.09:
-                u = 0.09
-            elif u < -0.09:
-                u = -0.09
+            if u > 0.1:
+                u = 0.1
+            elif u < -0.1:
+                u = -0.1
 
             self.step(u)
 
@@ -492,6 +486,7 @@ class HexapodControl(RobotControl):
                 sequence.append('east')
 
         return sequence
+
 if __name__ == "__main__":
     q = HexapodControl()
     rospy.spin()
