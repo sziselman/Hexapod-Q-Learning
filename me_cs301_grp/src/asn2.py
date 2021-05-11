@@ -68,12 +68,16 @@ class HexapodControl(RobotControl):
             # self.hold_neutral() #remove if not necessary
             # ---- add your code for a particular behavior here ----- #
 
+
+            # THIS IS WHERE YOU INPUT THE START AND GOAL CELLS
             start = Cell((0, 0))
             goal = Cell((1, 1))
 
+            # Generates a path / sequence of grid cells to visit
             path = self.a_star_search(map, start, goal)
+            # Generates a command sequence to achieve path
             sequence = self.command_sequence(path)
-
+            # Walks the path by following the command sequence
             for direction in sequence:
                 self.move_cell(direction)
 
@@ -375,6 +379,7 @@ class HexapodControl(RobotControl):
         return abs(current.position[0] - goal.position[0]) + abs(current.position[1] - goal.position[1])
 
     # function that calculates the straight line distance between cells
+    # Straight line distance is used to calculate the f cost of each grid cell
     def straight_line_distance(self, current, goal):
         return math.sqrt((current.position[0] - goal.position[0])**2 + (current.position[1] - goal.position[1])**2)
 
