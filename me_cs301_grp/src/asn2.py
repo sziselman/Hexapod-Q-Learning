@@ -37,11 +37,14 @@ j3_limits = [-3.14, 3.14]
 step = 0.55
 
 class Cell():
-    def __init__(self, i, j):
-        self.i = i
-        self.j = j
+    def __init__(self, position):
+        self.position = position
+        self.f = 0
         self.parent = []
         self.children = []
+
+    def __eq__(self, other):
+        return self.position == other.position
 
 class HexapodControl(RobotControl):
     i = 0
@@ -65,10 +68,15 @@ class HexapodControl(RobotControl):
             # self.hold_neutral() #remove if not necessary
             # ---- add your code for a particular behavior here ----- #
 
-            start = Cell(0, 0)
-            goal = Cell(0, 2)
+            start = Cell((0, 0))
+            goal = Cell((3, 7))
 
-            self.a_star_search(map, start, goal)
+            path = self.a_star_search(map, start, goal)
+            sequence = self.command_sequence(path)
+
+            for direction in sequence:
+                self.move_cell(direction)
+
             break
 
             time.sleep(0.1) # change the sleep time to whatever is the appropriate control rate for simulation
@@ -367,10 +375,43 @@ class HexapodControl(RobotControl):
         
         print('moved one cell ', direction)
         return
-            
-    def manhatten_distance(self, current, goal):
-        return abs(current.i - goal.i) + abs(current.j - current.j)
 
+    # function that calculates the manhatten distance between cells       
+    def manhatten_distance(self, current, goal):
+        return abs(current.position[0] - goal.position[0]) + abs(current.position[1] - goal.position[1])
+
+    # function that calculates the straight line distance between cells
+    def straight_line_distance(self, current, goal):
+        return math.sqrt((current.position[0] - goal.position[0])**2 + (current.position[1] - goal.position[1])**2)
+
+    # function that looks for node's successors
+    def successors(self, map, node):
+
+        successors = []
+        # check if north cell is not blocked
+        if map.getNeighborObstacle(node.position[0], node.position[1], 1) == 0:
+            successor = Cell((node.position[0]-1, node.position[1]))
+            # successor.parent.append(node)
+            successors.append(successor)
+        # check if east cell is not blocked
+        if map.getNeighborObstacle(node.position[0], node.position[1], 2) == 0:
+            successor = Cell((node.position[0], node.position[1]+1))
+            # successor.parent.append(node)
+            successors.append(successor)
+        # check if south cell is not blocked
+        if map.getNeighborObstacle(node.position[0], node.position[1], 3) == 0:
+            successor = Cell((node.position[0]+1, node.position[1]))
+            # successor.parent.append(node)
+            successors.append(successor)
+        # check if west cell is not blocked
+        if map.getNeighborObstacle(node.position[0], node.position[1], 4) == 0:
+            successor = Cell((node.position[0], node.position[1]-1))
+            # successor.parent.append(node)
+            successors.append(successor)
+
+        return successors
+
+    # function that implements a* search algorithm
     def a_star_search(self, map, start, goal):
         # open: list of nodes that may need to be expanded
         queue = [start]
@@ -378,70 +419,79 @@ class HexapodControl(RobotControl):
         # closed: list of nodes that represent the best path
         path = []
 
-        cost = 0
+        iterations = 0
 
         while len(queue) > 0:
+
+            iterations += 1
+            if iterations > 200:
+                print('Took too long to find path, none found.')
+                return path
+
             # find the cell with the least f on the queue (open list)
             f_dict = {}
             for cell in queue:
-                f_score = self.manhatten_distance(cell, goal)
-                f_dict[cell] = f_score
+                cell.f = len(path) + self.straight_line_distance(cell, goal)
+                f_dict[queue.index(cell)] = cell.f
             
-            q = min(f_dict, key=f_dict.get)
-            print(q.i, ', ', q.j)
+            q = queue[min(f_dict, key=f_dict.get)]
+
+            # remove q from queue and add to path
             queue.remove(q)
+            path.append(q)
+
+            # not quite sure if I can just clear the queue, but everywhere I see on the internet
+            # looks like older items in the queue never get visited... it also caused me problems
+            # to keep old items in the queue
+            queue = []
+
+            if q == goal:
+                return path
 
             # generate q's successors and set parents to q
 
-            # check if north cell is not blocked
-            if map.getNeighborObstacle(q.i, q.j, 1) == 0:
-                successor = Cell(q.i-1, q.j)
-                successor.parent.append(q)
-                q.children.append(successor)
-            # check if east cell is not blocked
-            if map.getNeighborObstacle(q.i, q.j, 2) == 0:
-                successor = Cell(q.i, q.j+1)
-                successor.parent.append(q)
-                q.children.append(successor)
-            # check if south cell is not blocked
-            if map.getNeighborObstacle(q.i, q.j, 3) == 0:
-                successor = Cell(q.i+1, q.j)
-                successor.parent.append(q)
-                q.children.append(successor)
-            # check if west cell is not blocked
-            if map.getNeighborObstacle(q.i, q.j, 4) == 0:
-                successor = Cell(q.i, q.j-1)
-                successor.parent.append(q)
-                q.children.append(successor)
-            
-            print(len(q.children))
+            successors = self.successors(map, q)
+
+            for s in successors:
+                q.children.append(s)
 
             # loop through each successor
             for cell in q.children:
+
                 # calculate f score
+                cell.f = len(path) + self.straight_line_distance(cell, goal)
 
-                
-
-                # if the successor is the goal, stop search
-                if cell.i == goal.i and cell.j == goal.j:
-
-                # if node with same position as successor is in the open list
-                # and has lower f score than successor, skip successor
-
-                # if node with same position as successor is in the closed list
-                # and has lower f score than successor, skip successor
-
-                # otherwise, add node to the open list
-
-
-            # append q to the path (closed list)
-            path.append(q)
-
-
-
+                # if the successor has already been visited, move to next successor
+                if len([visited for visited in path if visited == cell]) > 0:
+                    continue
             
+                # if the successor is in the queue and the f cost is already lower, move to next successor
+                if len([item for item in queue if item == cell and cell.f > item.f]) > 0:
+                    continue
+                
+                # add the successor to the queue
+                queue.append(cell)
 
+    # function that generates a command sequence to achieve the path found
+    def command_sequence(self, path):
 
+        sequence = []
+
+        for i in range(len(path)-1):
+            curr_cell = path[i].position
+            next_cell = path[i+1].position
+
+            # if the next cell is to the left
+            if curr_cell[0] > next_cell[0]:
+                sequence.append('north')
+            elif curr_cell[0] < next_cell[0]:
+                sequence.append('south')
+            elif curr_cell[1] > next_cell[1]:
+                sequence.append('west')
+            elif curr_cell[1] < next_cell[1]:
+                sequence.append('east')
+
+        return sequence
 if __name__ == "__main__":
     q = HexapodControl()
     rospy.spin()
