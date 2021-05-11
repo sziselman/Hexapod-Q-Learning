@@ -36,28 +36,12 @@ j3_limits = [-3.14, 3.14]
 
 step = 0.55
 
-
-# def quat_to_euler(orientation):
-#     x = orientation.x
-#     y = orientation.y
-#     z = orientation.z
-#     w = orientation.w 
-
-#     t0 = +2.0 * (w * x + y * z)
-#     t1 = +1.0 - 2.0 * (x * x + y * y)
-#     roll_x = math.atan2(t0, t1)
-     
-#     t2 = +2.0 * (w * y - z * x)
-#     t2 = +1.0 if t2 > +1.0 else t2
-#     t2 = -1.0 if t2 < -1.0 else t2
-#     pitch_y = math.asin(t2)
-     
-#     t3 = +2.0 * (w * z + x * y)
-#     t4 = +1.0 - 2.0 * (y * y + z * z)
-#     yaw_z = math.atan2(t3, t4)
-     
-#     return roll_x, pitch_y, yaw_z # in radians
-
+class Cell():
+    def __init__(self, i, j):
+        self.i = i
+        self.j = j
+        self.parent = []
+        self.children = []
 
 class HexapodControl(RobotControl):
     i = 0
@@ -80,16 +64,11 @@ class HexapodControl(RobotControl):
         while not rospy.is_shutdown(): 
             # self.hold_neutral() #remove if not necessary
             # ---- add your code for a particular behavior here ----- #
-            self.move_cell('south')
 
-            print('orientation is ', self.orientation)
-            print('new location is at (', self.i, ', ', self.j, ')')
+            start = Cell(0, 0)
+            goal = Cell(0, 2)
 
-            self.move_cell('east')
-
-            print('orientation is ', self.orientation)
-            print('new location is at (', self.i, ', ', self.j, ')')
-
+            self.a_star_search(map, start, goal)
             break
 
             time.sleep(0.1) # change the sleep time to whatever is the appropriate control rate for simulation
@@ -388,6 +367,78 @@ class HexapodControl(RobotControl):
         
         print('moved one cell ', direction)
         return
+            
+    def manhatten_distance(self, current, goal):
+        return abs(current.i - goal.i) + abs(current.j - current.j)
+
+    def a_star_search(self, map, start, goal):
+        # open: list of nodes that may need to be expanded
+        queue = [start]
+
+        # closed: list of nodes that represent the best path
+        path = []
+
+        cost = 0
+
+        while len(queue) > 0:
+            # find the cell with the least f on the queue (open list)
+            f_dict = {}
+            for cell in queue:
+                f_score = self.manhatten_distance(cell, goal)
+                f_dict[cell] = f_score
+            
+            q = min(f_dict, key=f_dict.get)
+            print(q.i, ', ', q.j)
+            queue.remove(q)
+
+            # generate q's successors and set parents to q
+
+            # check if north cell is not blocked
+            if map.getNeighborObstacle(q.i, q.j, 1) == 0:
+                successor = Cell(q.i-1, q.j)
+                successor.parent.append(q)
+                q.children.append(successor)
+            # check if east cell is not blocked
+            if map.getNeighborObstacle(q.i, q.j, 2) == 0:
+                successor = Cell(q.i, q.j+1)
+                successor.parent.append(q)
+                q.children.append(successor)
+            # check if south cell is not blocked
+            if map.getNeighborObstacle(q.i, q.j, 3) == 0:
+                successor = Cell(q.i+1, q.j)
+                successor.parent.append(q)
+                q.children.append(successor)
+            # check if west cell is not blocked
+            if map.getNeighborObstacle(q.i, q.j, 4) == 0:
+                successor = Cell(q.i, q.j-1)
+                successor.parent.append(q)
+                q.children.append(successor)
+            
+            print(len(q.children))
+
+            # loop through each successor
+            for cell in q.children:
+                # calculate f score
+
+                
+
+                # if the successor is the goal, stop search
+                if cell.i == goal.i and cell.j == goal.j:
+
+                # if node with same position as successor is in the open list
+                # and has lower f score than successor, skip successor
+
+                # if node with same position as successor is in the closed list
+                # and has lower f score than successor, skip successor
+
+                # otherwise, add node to the open list
+
+
+            # append q to the path (closed list)
+            path.append(q)
+
+
+
             
 
 
