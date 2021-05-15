@@ -5,6 +5,7 @@ import math
 import sys
 import os
 import rospkg
+import random
 sys.path.append(os.path.join(rospkg.RosPack().get_path('me_cs301_robots'), 'scripts'))
 from robot_control import RobotControl
 from map import *
@@ -50,6 +51,7 @@ class HexapodControl(RobotControl):
     i = 0
     j = 0
     orientation = 'south'
+    visited = []
 
     def __init__(self):
         super(HexapodControl, self).__init__(robot_type='hexapod')
@@ -58,11 +60,12 @@ class HexapodControl(RobotControl):
         time.sleep(2.0)
 
         map = CSMEMap()
+        map.clearObstacleMap()
         map.printObstacleMap()
         
-        print('starting location is at (', self.i, ', ', self.j, ')')
+        current = Cell((self.i, self.j))
+        self.initialize_first_cell(map, current)
         
-
         #main control loop
         while not rospy.is_shutdown(): 
             # self.hold_neutral() #remove if not necessary
@@ -70,18 +73,28 @@ class HexapodControl(RobotControl):
 
 
             # THIS IS WHERE YOU INPUT THE START AND GOAL CELLS
-            start = Cell((0, 0))
-            goal = Cell((1, 1))
+            # start = Cell((self.i, self.j))
+            # print('starting location is at (', self.i, ', ', self.j, ')')
+            # goal = Cell((3, 5))
 
-            # Generates a path / sequence of grid cells to visit
-            path = self.a_star_search(map, start, goal)
-            # Generates a command sequence to achieve path
-            sequence = self.command_sequence(path)
-            # Walks the path by following the command sequence
-            for direction in sequence:
-                self.move_cell(direction)
+            # # Generates a path / sequence of grid cells to visit
+            # path = self.a_star_search(map, start, goal)
+            # # Generates a command sequence to achieve path
+            # sequence = self.command_sequence(path)
+            # print(sequence)
+            # # Walks the path by following the command sequence
+            # for direction in sequence:
+            #     self.move_cell(direction)
 
-            break
+            # print('ending location is at (', self.i, ', ', self.j, ')')
+
+            next_cell = self.wander(map, current)
+
+            print('current location is (', self.i, ', ', self.j, ')')
+            print('current cell is: (', next_cell.position[0], ', ', next_cell.position[1], ')')
+            print('orientation is: ', self.orientation)
+
+            current = next_cell
 
             time.sleep(0.1) # change the sleep time to whatever is the appropriate control rate for simulation
 
@@ -329,7 +342,7 @@ class HexapodControl(RobotControl):
                 self.j += 1
 
             elif direction == 'south':
-                self.turn_left()
+                self.turn_left90()
                 self.orientation = 'south'
                 self.i += 1
             
@@ -390,22 +403,22 @@ class HexapodControl(RobotControl):
         # check if north cell is not blocked
         if map.getNeighborObstacle(node.position[0], node.position[1], 1) == 0:
             successor = Cell((node.position[0]-1, node.position[1]))
-            # successor.parent.append(node)
+            successor.parent.append(node)
             successors.append(successor)
         # check if east cell is not blocked
         if map.getNeighborObstacle(node.position[0], node.position[1], 2) == 0:
             successor = Cell((node.position[0], node.position[1]+1))
-            # successor.parent.append(node)
+            successor.parent.append(node)
             successors.append(successor)
         # check if south cell is not blocked
         if map.getNeighborObstacle(node.position[0], node.position[1], 3) == 0:
             successor = Cell((node.position[0]+1, node.position[1]))
-            # successor.parent.append(node)
+            successor.parent.append(node)
             successors.append(successor)
         # check if west cell is not blocked
         if map.getNeighborObstacle(node.position[0], node.position[1], 4) == 0:
             successor = Cell((node.position[0], node.position[1]-1))
-            # successor.parent.append(node)
+            successor.parent.append(node)
             successors.append(successor)
 
         return successors
@@ -416,35 +429,43 @@ class HexapodControl(RobotControl):
         queue = [start]
 
         # closed: list of nodes that represent the best path
-        path = []
+        closed = []
 
         iterations = 0
 
+        # loop through until no more cells in the queue
         while len(queue) > 0:
 
+            # if iterations is too large, return no path found
             iterations += 1
             if iterations > 200:
                 print('Took too long to find path, none found.')
-                return path
+                return []
 
-            # find the cell with the least f on the queue (open list)
+            # find the cell with the least f cost on the queue (open list)
             f_dict = {}
             for cell in queue:
-                cell.f = len(path) + self.straight_line_distance(cell, goal)
+                cell.f = self.manhatten_distance(start, cell) + self.straight_line_distance(cell, goal)
                 f_dict[queue.index(cell)] = cell.f
             
             q = queue[min(f_dict, key=f_dict.get)]
-
+            
             # remove q from queue and add to path
             queue.remove(q)
-            path.append(q)
+            closed.append(q)
 
             # not quite sure if I can just clear the queue, but everywhere I see on the internet
             # looks like older items in the queue never get visited... it also caused me problems
             # to keep old items in the queue
-            queue = []
+            # queue = []
 
             if q == goal:
+                print('Found the goal cell!')
+                path = [start]
+                cell = q
+                while len(cell.parent) > 0:
+                    path.insert(1, cell)
+                    cell = cell.parent[0]
                 return path
 
             # generate q's successors and set parents to q
@@ -458,10 +479,10 @@ class HexapodControl(RobotControl):
             for cell in q.children:
 
                 # calculate f score
-                cell.f = len(path) + self.straight_line_distance(cell, goal)
+                cell.f = self.manhatten_distance(start, q) + self.straight_line_distance(cell, goal)
 
                 # if the successor has already been visited, move to next successor
-                if len([visited for visited in path if visited == cell]) > 0:
+                if len([visited for visited in closed if visited == cell]) > 0:
                     continue
             
                 # if the successor is in the queue and the f cost is already lower, move to next successor
@@ -471,7 +492,12 @@ class HexapodControl(RobotControl):
                 # add the successor to the queue
                 queue.append(cell)
 
-    # function that generates a command sequence to achieve the path found
+    # *******************************************************
+    # Function Name     :   command_sequence
+    # Description       :   takes a path (list of cells) and generates a sequence of commands to move the hexapod
+    # Input             :   path : a list of cells to visit
+    # Ouptut            :   sequence : a list of directions to move in
+    # *******************************************************
     def command_sequence(self, path):
 
         sequence = []
@@ -491,6 +517,108 @@ class HexapodControl(RobotControl):
                 sequence.append('east')
 
         return sequence
+
+    # *******************************************************
+    # Function Name     : find_obstacles
+    # Description       : function that checks front, left and right sensors for obstacles
+    # Input             : map : the current map
+    # Input             : current : the current cell that the hexapod is in
+    # *******************************************************
+    def find_obstacles(self, map, current):
+        # checks for obstacle in front
+        if self.getSensorValue('front') > 0:
+            if self.orientation == 'north':
+                map.setObstacle(current.position[0], current.position[1], True, 1)
+            elif self.orientation == 'east':
+                map.setObstacle(current.position[0], current.position[1], True, 2)
+            elif self.orientation == 'south':
+                map.setObstacle(current.position[0], current.position[1], True, 3)
+            elif self.orientation == 'west':
+                map.setObstacle(current.position[0], current.position[1], True, 4)
+        # checks for obstacle to the left
+        if self.getSensorValue('left') > 0:
+            if self.orientation == 'north':
+                map.setObstacle(current.position[0], current.position[1], True, 4)
+            elif self.orientation == 'east':
+                map.setObstacle(current.position[0], current.position[1], True, 1)
+            elif self.orientation == 'south':
+                map.setObstacle(current.position[0], current.position[1], True, 2)
+            elif self.orientation == 'west':
+                map.setObstacle(current.position[0], current.position[1], True, 3)
+        # checks for obstacle to the right
+        if self.getSensorValue('right') > 0:
+            if self.orientation == 'north':
+                map.setObstacle(current.position[0], current.position[1], True, 2)
+            elif self.orientation == 'east':
+                map.setObstacle(current.position[0], current.position[1], True, 3)
+            elif self.orientation == 'south':
+                map.setObstacle(current.position[0], current.position[1], True, 4)
+            elif self.orientation == 'west':
+                map.setObstacle(current.position[0], current.position[1], True, 1)
+        
+        map.printObstacleMap()
+
+    # *******************************************************
+    # Function Name     : wander
+    # Description       : explores map B by walking to unvisited nodes and looking for obstacles
+    # Input             : map : the current map
+    #                   : current : the current cell that the hexapod is in
+    # Output            : next : the cell that the hexapod has moved to
+    # *******************************************************
+    def wander(self, map, current):
+        # add the current node to the list of visited nodes
+        self.visited.append(current)
+
+        print('wandering!')
+
+        # updating obstacles
+        self.find_obstacles(map, current)
+
+        # find possible successors of the current cell
+        successors = self.successors(map, current)
+
+        # if a successor has not been visited, walk in that direction
+        options = []
+        for successor in successors:
+            if successor not in self.visited:
+                options.append(successor)
+
+        print('the possible directions are: ')
+        for option in options:
+            print('(', option.position[0], ', ', option.position[1], ')')
+
+        if len(options) > 0:
+            random_index = random.randint(0, len(options)-1)
+            next = options[random_index]
+        else:
+            random_index = random.randint(0, len(successors)-1)
+            next = successors[random_index]
+
+        # chooses a random cell out of unvisited cells to move
+
+        if next.position[0] > current.position[0]:
+            self.move_cell('south')
+        elif next.position[0] < current.position[0]:
+            self.move_cell('north')
+        elif next.position[1] > current.position[1]:
+            self.move_cell('east')
+        elif next.position[1] < current.position[1]:
+            self.move_cell('west')
+
+        return next
+
+    # *******************************************************
+    # Function Name     : initialize_first_cell
+    # Description       : implemented only when in cell (0, 0), checks for walls in every direction
+    # Input             : map : the current map
+    def initialize_first_cell(self, map, current):
+        self.find_obstacles(map, current)
+        self.turn_around()
+        self.orientation = 'north'
+        self.find_obstacles(map, current)
+        self.turn_around()
+        self.orientation = 'south'
+
 
 if __name__ == "__main__":
     q = HexapodControl()
