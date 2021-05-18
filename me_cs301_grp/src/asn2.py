@@ -60,39 +60,76 @@ class HexapodControl(RobotControl):
         time.sleep(2.0)
 
         map = CSMEMap()
-        map.clearObstacleMap()
-        map.printObstacleMap()
         
-        current = Cell((self.i, self.j))
-        self.initialize_first_cell(map, current)
-        
+        plan = input('Input True for planning and executing a path or input False for mapping in an unknown area: ')
+
+        if plan == 'True':
+            print('Planning a path and executing!')
+            map.printObstacleMap()
+
+            self.i = int(input('Input the starting north/south location: '))
+            while self.i < 0 or self.i > 7:
+                self.i = int(input('Input the starting north/south location: '))
+            self.j = int(input('Input the starting east/west location: '))
+            while self.j < 0 or self.j > 7:
+                self.j = int(input('Input the starting east/west location: '))
+            self.orientation = input('Input the starting orientation: ')
+            while self.orientation != 'north' and self.orientation != 'east' and self.orientation != 'south' and self.orientation != 'west':
+                self.orientation = input('Input the starting orientation: ')
+            
+            # create start cell based on interactive inputs
+            start = Cell((self.i, self.j))
+
+            goal_i = int(input('Input the goal north/south location: '))
+            while goal_i < 0 or goal_i > 7:
+                goal_i = int(input('Input the goal north/south location: '))
+            goal_j = int(input('Input the goal east/west location: '))
+            while goal_j < 0 or goal_j > 7:
+                goal_j = int(input('Input the goal east/west location: '))
+            goal_orientation = input('Input the goal orientation: ')
+            while goal_orientation != 'north' and goal_orientation != 'east' and goal_orientation != 'south' and goal_orientation != 'west':
+                goal_orientation = input('Input the goal orientation: ')
+
+            # create goal cell based on interactive inputs
+            goal = Cell((goal_i, goal_j))
+
+        elif plan == 'False':
+            print('Mapping in an unknown area!')
+            map.clearObstacleMap()
+            map.printObstacleMap()
+
+            # have starting cell located at (0, 0) with orientation south
+            self.i = 0
+            self.j = 0
+            self.orientation = 'south'
+            current = Cell((self.i, self.j))
+            print('Starting at location: (', current.position[0], ', ', current.position[1], ')')
+            self.initialize_first_cell(map, current)
+        else:
+            while plan != 'True' and plan != 'False':
+                plan = input('Invalid input, input True for planning and executing a path or False for mapping in an unknown area: ')
+
         #main control loop
         while not rospy.is_shutdown(): 
-            # self.hold_neutral() #remove if not necessary
-            # ---- add your code for a particular behavior here ----- #
 
+            # planning and executing
+            if plan == 'True':
+                print('Generating a path / sequence of grid cells to visit...')
+                path = self.a_star_search(map, start, goal)
+                print('Generating a command sequence to achieve path...')
+                sequence = self.command_sequence(path)
+                print(sequence)
+                print('Executing command sequence...')
+                for direction in sequence:
+                    self.move_cell(direction)
 
-            # THIS IS WHERE YOU INPUT THE START AND GOAL CELLS
-            # start = Cell((self.i, self.j))
-            # print('starting location is at (', self.i, ', ', self.j, ')')
-            # goal = Cell((3, 5))
-
-            # # Generates a path / sequence of grid cells to visit
-            # path = self.a_star_search(map, start, goal)
-            # # Generates a command sequence to achieve path
-            # sequence = self.command_sequence(path)
-            # print(sequence)
-            # # Walks the path by following the command sequence
-            # for direction in sequence:
-            #     self.move_cell(direction)
-
-            # print('ending location is at (', self.i, ', ', self.j, ')')
-
-            next_cell = self.wander(map, current)
-
-            print('current location is (', self.i, ', ', self.j, ')')
-            print('current cell is: (', next_cell.position[0], ', ', next_cell.position[1], ')')
-            print('orientation is: ', self.orientation)
+                self.change_orientation(goal_orientation)
+                break
+            else:
+                print('current cell is: (', current.position[0], ', ', current.position[1], ')')
+                print('current orientation is: ', self.orientation)
+                next_cell = self.wander(map, current)
+                current = next_cell
 
             current = next_cell
 
@@ -153,7 +190,8 @@ class HexapodControl(RobotControl):
     
         for i in range(len(list1)):
             self.setMotorTargetJointPosition(list1[i], raise_j2)
-        self.next_move(list1, [raise_j2]*len(list1))
+        # self.next_move(list1, [raise_j2]*len(list1))
+        time.sleep(0.15)
 
         # rotate legs 1, 3, 5 forward (joint 1)
         # rotate legs 2, 4, 6 backward (joint 1)
@@ -200,10 +238,10 @@ class HexapodControl(RobotControl):
 
         if (cw == True):
             # rotate_j1 = -math.pi/6
-            rotate_j1 = -0.54
+            rotate_j1 = -0.535
         else:
             # rotate_j1 = math.pi/6
-            rotate_j1 = 0.54
+            rotate_j1 = 0.535
 
         raise_j2 = -0.7
 
@@ -237,12 +275,8 @@ class HexapodControl(RobotControl):
         self.next_move(tripod2_ids, [raise_j2]*len(tripod2_ids))
        
         # rotate legs 2, 4, 6
-        # rotate_t2_angles = [-rotate_j1, rotate_j1, -rotate_j1, rotate_j1, -rotate_j1, rotate_j1]
-
         for i in range(len(rotate_ids)):
-            # self.setMotorTargetJointPosition(rotate_ids[i], rotate_t2_angles[i])
             self.setMotorTargetJointPosition(rotate_ids[i], home[0])
-        # self.next_move(rotate_ids, rotate_t2_angles)
         self.next_move(rotate_ids, [home[0]]*len(rotate_ids))
 
         # lower legs 2, 4, 6
@@ -611,6 +645,7 @@ class HexapodControl(RobotControl):
     # Function Name     : initialize_first_cell
     # Description       : implemented only when in cell (0, 0), checks for walls in every direction
     # Input             : map : the current map
+    # *******************************************************
     def initialize_first_cell(self, map, current):
         self.find_obstacles(map, current)
         self.turn_around()
@@ -619,6 +654,63 @@ class HexapodControl(RobotControl):
         self.turn_around()
         self.orientation = 'south'
 
+    # *******************************************************
+    # Function Name     : change_orientation
+    # Description       : used to change the orientation of the hexapod to desired
+    # Input             : direction
+    # *******************************************************
+    def change_orientation(self, direction):
+        if self.orientation == 'north':
+            if direction == 'north':
+                pass
+            elif direction == 'east':
+                self.turn_right90()
+
+            elif direction == 'south':
+                self.turn_around()
+
+            elif direction == 'west':
+                self.turn_left90()
+
+        elif self.orientation == 'east':
+            if direction == 'east':
+                pass
+            elif direction == 'south':
+                self.turn_right90()
+
+            elif direction == 'west':
+                self.turn_around()
+
+            elif direction == 'north':
+                self.turn_left90()
+            
+        elif self.orientation == 'south':
+            if direction == 'south':
+                pass
+            
+            elif direction == 'west':
+                self.turn_right90()
+            
+            elif direction == 'north':
+                self.turn_around()
+
+            elif direction == 'east':
+                self.turn_left90()
+        
+        elif self.orientation == 'west':
+            if direction == 'west':
+                pass
+
+            elif direction == 'north':
+                self.turn_right90()
+
+            elif direction == 'east':
+                self.turn_around()
+
+            elif direction == 'south':
+                self.turn_left90()
+
+        self.orientation = direction
 
 if __name__ == "__main__":
     q = HexapodControl()
