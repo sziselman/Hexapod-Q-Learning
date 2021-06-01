@@ -69,139 +69,145 @@ class HexapodControl(RobotControl):
         actions = np.linspace(0.35, 0.65, self.N)
         states = np.linspace(0.10, 0.40, self.N)
 
-        # ##################################
-        # # Uncomment section to build dataset
-        # ##################################
+        ##################################
+        # Uncomment section to build dataset
+        ##################################
 
-        # runs = 0
+        runs = 0
         
-        # while not rospy.is_shutdown():
-
-        #     i = 0
-
-        #     curr_error = 0
-        #     prev_error = 0
-        #     tot_error = 0
-        #     desired_dist = 0.325
-
-        #     prev_position, prev_orientation = self.getRobotWorldLocation()
-        #     prev_x = prev_position.x
-        #     prev_y = prev_position.y
-
-        #     # have robot walk until it detects an obstacle in front, at each step update the q matrix
-        #     while self.getSensorValue('front') < 0:
-
-        #         # get the distance from the wall depending on the sensor that is being triggered, calculate current error for PID controller
-        #         if self.getSensorValue('left') > 0 and self.getSensorValue('right') < 0:
-        #             distance = self.getSensorValue('left')
-        #             curr_error = distance - desired_dist
-        #         elif self.getSensorValue('right') > 0 and self.getSensorValue('left') < 0:
-        #             distance = self.getSensorValue('right')
-        #             curr_error = distance - desired_dist
-        #         elif self.getSensorValue('left') > 0 and self.getSensorValue('right') > 0:
-        #             distance = self.getSensorValue('left')
-        #             curr_error = distance - desired_dist
-        #         else:
-        #             break
-                
-        #         # transition function (distance from the wall)
-        #         state_index = fit2states(states, distance)
-        #         state = states[state_index]
-
-        #         # randomly select an action for training
-        #         random_action_index = random.randint(0, self.N-1)
-        #         random_action = actions[random_action_index]
-
-        #         # determine the control using PID
-        #         control = self.pid_control(curr_error, prev_error, tot_error)
-
-        #         if random_action + control > j1_limits[1]:
-        #             control = j1_limits[1] - random_action
-        #         elif -random_action + control < j1_limits[0]:
-        #             control = j1_limits[0] + random_action
-
-        #         # have robot take one step forward
-        #         self.step(control, random_action)
-
-        #         # reward function is distance traveled by each step
-        #         curr_position, curr_orientation = self.getRobotWorldLocation()
-
-        #         print('current position of robot is: ', curr_position.x, curr_position.y)
-
-        #         distance_traveled = math.sqrt((curr_position.x - prev_x)**2 + (curr_position.y - prev_y)**2)
-
-        #         prev_x = curr_position.x
-        #         prev_y = curr_position.y
-
-        #         print('the distance traveled is: ', distance_traveled)
-
-        #         # increase cell in Q matrix corresponding to state/action by reward function
-        #         self.Q_mat[state_index][random_action_index] += distance_traveled
-
-        #         np.savetxt("results.csv", self.Q_mat, delimiter=",")
-                
-        #         i += 1
-        #         runs += 1
-        #         print('The amount of runs executed: ', runs, '\n')
-
-        #     # reset the location and orientation of the robot to starting
-        #     quaternion = euler_to_quaternion(0.0, -math.pi/2, math.pi)
-        #     position, orientation = self.getRobotWorldLocation()
-        #     position.x = 0
-        #     position.y = 0
-        #     orientation.x = quaternion[0]
-        #     orientation.y = quaternion[1]
-        #     orientation.z = quaternion[2]
-        #     orientation.w = quaternion[3]
-
-        #     self.setRobotPose(position, orientation)
-
-        ##################################
-        # Uncomment section to build model using Least Squares regression
-        ##################################
-
         while not rospy.is_shutdown():
-            
+
+            i = 0
+
             curr_error = 0
             prev_error = 0
             tot_error = 0
             desired_dist = 0.325
 
-            # get the distance from the wall depending on the sensor that is being triggered, calculate current error for PID controller
-            if self.getSensorValue('left') > 0 and self.getSensorValue('right') < 0:
-                distance = self.getSensorValue('left')
-                curr_error = distance - desired_dist
-            elif self.getSensorValue('right') > 0 and self.getSensorValue('left') < 0:
-                distance = self.getSensorValue('right')
-                curr_error = distance - desired_dist
-            elif self.getSensorValue('left') > 0 and self.getSensorValue('right') > 0:
-                distance = self.getSensorValue('left')
-                curr_error = distance - desired_dist
-            else:
-                break
+            prev_position, prev_orientation = self.getRobotWorldLocation()
+            prev_x = prev_position.x
+            prev_y = prev_position.y
 
-            # transition function (distance from the wall)
-            state_index = fit2states(states, distance)
-            state = states[state_index]
+            # have robot walk until it detects an obstacle in front, at each step update the q matrix
+            while self.getSensorValue('front') < 0:
 
-            action_index = (self.Q_mat[state_index]).argmax()
-            action = actions[action_index]
+                # get the distance from the wall depending on the sensor that is being triggered, calculate current error for PID controller
+                if self.getSensorValue('left') > 0 and self.getSensorValue('right') < 0:
+                    distance = self.getSensorValue('left')
+                    curr_error = distance - desired_dist
+                elif self.getSensorValue('right') > 0 and self.getSensorValue('left') < 0:
+                    distance = self.getSensorValue('right')
+                    curr_error = distance - desired_dist
+                elif self.getSensorValue('left') > 0 and self.getSensorValue('right') > 0:
+                    distance = self.getSensorValue('left')
+                    curr_error = distance - desired_dist
+                else:
+                    break
+                
+                # transition function (distance from the wall)
+                state_index = fit2states(states, distance)
+                state = states[state_index]
 
-            # determine the control using PID
-            control = self.pid_control(curr_error, prev_error, tot_error)
+                # randomly select an action for training
+                random_action_index = random.randint(0, self.N-1)
+                random_action = actions[random_action_index]
 
-            if action + control > j1_limits[1]:
-                control = j1_limits[1] - action
-            elif - action + control < j1_limits[0]:
-                control = j1_limits[0] + action
+                # determine the control using PID
+                control = self.pid_control(curr_error, prev_error, tot_error)
 
-            # have robot take one step forward
-            self.step(control, action)
+                if random_action + control > j1_limits[1]:
+                    control = j1_limits[1] - random_action
+                elif -random_action + control < j1_limits[0]:
+                    control = j1_limits[0] + random_action
+
+                # have robot take one step forward
+                self.step(control, random_action)
+
+                curr_position, curr_orientation = self.getRobotWorldLocation()
+
+                print('current position of robot is: ', curr_position.x, curr_position.y)
+                
+                # reward function is distance traveled by each step
+                distance_traveled = math.sqrt((curr_position.x - prev_x)**2 + (curr_position.y - prev_y)**2)
+
+                prev_x = curr_position.x
+                prev_y = curr_position.y
+
+                print('the distance traveled is: ', distance_traveled)
+
+                # increase cell in Q matrix corresponding to state/action by reward function
+                self.Q_mat[state_index][random_action_index] += distance_traveled
+
+                # save the .csv file, however this file will save in the me_cs301_coppeliasim_robots directory which is not uploaded to the github!!
+                np.savetxt("results.csv", self.Q_mat, delimiter=",")
+                
+                i += 1
+                runs += 1
+                print('The amount of runs executed: ', runs, '\n')
+
+            # reset the location and orientation of the robot to starting
+            quaternion = euler_to_quaternion(0.0, -math.pi/2, math.pi)
+            position, orientation = self.getRobotWorldLocation()
+            position.x = 0
+            position.y = 0
+            orientation.x = quaternion[0]
+            orientation.y = quaternion[1]
+            orientation.z = quaternion[2]
+            orientation.w = quaternion[3]
+
+            self.setRobotPose(position, orientation)
+
+        ##################################
 
 
 
-            time.sleep(0.1)
+
+
+        # ##################################
+        # # Uncomment section to build model using Least Squares regression
+        # ##################################
+
+        # while not rospy.is_shutdown():
             
+        #     curr_error = 0
+        #     prev_error = 0
+        #     tot_error = 0
+        #     desired_dist = 0.325
+
+        #     # get the distance from the wall depending on the sensor that is being triggered, calculate current error for PID controller
+        #     if self.getSensorValue('left') > 0 and self.getSensorValue('right') < 0:
+        #         distance = self.getSensorValue('left')
+        #         curr_error = distance - desired_dist
+        #     elif self.getSensorValue('right') > 0 and self.getSensorValue('left') < 0:
+        #         distance = self.getSensorValue('right')
+        #         curr_error = distance - desired_dist
+        #     elif self.getSensorValue('left') > 0 and self.getSensorValue('right') > 0:
+        #         distance = self.getSensorValue('left')
+        #         curr_error = distance - desired_dist
+        #     else:
+        #         break
+
+        #     # transition function (distance from the wall)
+        #     state_index = fit2states(states, distance)
+        #     state = states[state_index]
+
+        #     action_index = (self.Q_mat[state_index]).argmax()
+        #     action = actions[action_index]
+
+        #     # determine the control using PID
+        #     control = self.pid_control(curr_error, prev_error, tot_error)
+
+        #     if action + control > j1_limits[1]:
+        #         control = j1_limits[1] - action
+        #     elif - action + control < j1_limits[0]:
+        #         control = j1_limits[0] + action
+
+        #     # have robot take one step forward
+        #     self.step(control, action)
+
+        #     time.sleep(0.1)
+
+        # ##################################            
 
     def hold_neutral(self):
         # --- simple example of a behavior ---- #
@@ -372,74 +378,6 @@ class HexapodControl(RobotControl):
         while (i < 6):
             self.turn(False)
             i += 1
-
-    # function that moves the robot south
-    def walk_forward(self, step):
-
-        start_seconds = rospy.get_time()
-
-        i = 0
-
-        curr_error = 0
-        prev_error = 0
-        tot_error = 0
-        dist = 0.325
-
-        position, orientation = self.getRobotWorldLocation()
-        x_distance_traveled = position.x
-
-        while (x_distance_traveled > -2.0):
-
-            # following left-sided wall
-            if self.getSensorValue('left') > 0 and self.getSensorValue('right') < 0:
-                curr_error = self.getSensorValue('left') - dist
-                u = self.pid_control(curr_error, prev_error, tot_error)
-
-            elif self.getSensorValue('right') > 0 and self.getSensorValue('left') < 0:
-                curr_error = self.getSensorValue('right') - dist
-                u = -self.pid_control(curr_error, prev_error, tot_error)
-
-            elif self.getSensorValue('left') > 0 and self.getSensorValue('right') > 0:
-                curr_error = self.getSensorValue('left') - dist
-                u = self.pid_control(curr_error, prev_error, tot_error)
-
-            else:
-                u = 0
-
-            # check for joint limits!!
-            if u > 0.1:
-                u = 0.1
-            elif u < -0.1:
-                u = -0.1
-
-            self.step(u, step)
-
-            i += 1
-
-            position, orientation = self.getRobotWorldLocation()
-            x_distance_traveled = position.x
-
-        end_seconds = rospy.get_time()
-
-        distance_traveled = math.sqrt(position.x**2 + position.y**2)
-
-        velocity = distance_traveled / (end_seconds - start_seconds)
-
-        return velocity
-
-    # newton's method function
-    def gradient_descent(self, w):
-        weight_history = [w]
-        gradient
-
-    # compute linear combination of input point
-    def model(self, x_p, w):
-        a = w[0] + np.dot(x_p.T, w[1:])
-        return a.T
-
-    def least_squares(self, w, x, y):
-        return
-
     
 if __name__ == "__main__":
     q = HexapodControl()
