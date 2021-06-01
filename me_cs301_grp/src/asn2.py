@@ -9,6 +9,7 @@ import random
 sys.path.append(os.path.join(rospkg.RosPack().get_path('me_cs301_robots'), 'scripts'))
 from robot_control import RobotControl
 from map import *
+import matplotlib.pyplot as plt
 
 '''
 MotorIDstrings for Hexapod follow the convention legN_jM, where N can be 1,2,3,4,5,6 (for each of the 6 legs) and M can 1,2,3. M=1 is the joint closest to the body and M=3 is the joint farthest from the body.
@@ -37,12 +38,38 @@ j3_limits = [-3.14, 3.14]
 
 step = 0.55
 
+def euler_from_quaternion(quaternion):
+        """
+        Convert a quaternion into euler angles (roll, pitch, yaw)
+        roll is rotation around x in radians (counterclockwise)
+        pitch is rotation around y in radians (counterclockwise)
+        yaw is rotation around z in radians (counterclockwise)
+        """
+        x = quaternion.x
+        y = quaternion.y
+        z = quaternion.z
+        w = quaternion.w
+
+        t0 = +2.0 * (w * x + y * z)
+        t1 = +1.0 - 2.0 * (x * x + y * y)
+        roll_x = math.atan2(t0, t1)
+     
+        t2 = +2.0 * (w * y - z * x)
+        t2 = +1.0 if t2 > +1.0 else t2
+        t2 = -1.0 if t2 < -1.0 else t2
+        pitch_y = math.asin(t2)
+     
+        t3 = +2.0 * (w * z + x * y)
+        t4 = +1.0 - 2.0 * (y * y + z * z)
+        yaw_z = math.atan2(t3, t4)
+     
+        return roll_x, pitch_y, yaw_z # in radians
+
 class Cell():
     def __init__(self, position):
         self.position = position
         self.f = 0
         self.parent = []
-        self.children = []
 
     def __eq__(self, other):
         return self.position == other.position
@@ -62,6 +89,8 @@ class HexapodControl(RobotControl):
         map = CSMEMap()
         
         plan = input('Input True for planning and executing a path or input False for mapping in an unknown area: ')
+
+        map.printObstacleMap()
 
         if plan == 'True':
             print('Planning a path and executing!')
@@ -109,7 +138,7 @@ class HexapodControl(RobotControl):
             while plan != 'True' and plan != 'False':
                 plan = input('Invalid input, input True for planning and executing a path or False for mapping in an unknown area: ')
 
-        #main control loop
+        # #main control loop
         while not rospy.is_shutdown(): 
 
             # planning and executing
@@ -131,7 +160,7 @@ class HexapodControl(RobotControl):
                 next_cell = self.wander(map, current)
                 current = next_cell
 
-            current = next_cell
+            # current = next_cell
 
             time.sleep(0.1) # change the sleep time to whatever is the appropriate control rate for simulation
 
@@ -238,10 +267,10 @@ class HexapodControl(RobotControl):
 
         if (cw == True):
             # rotate_j1 = -math.pi/6
-            rotate_j1 = -0.535
+            rotate_j1 = -0.54
         else:
             # rotate_j1 = math.pi/6
-            rotate_j1 = 0.535
+            rotate_j1 = 0.54
 
         raise_j2 = -0.7
 
@@ -255,6 +284,7 @@ class HexapodControl(RobotControl):
         for i in range(len(tripod1_ids)):
             self.setMotorTargetJointPosition(tripod1_ids[i], raise_j2)
         self.next_move(tripod1_ids, [raise_j2]*len(tripod1_ids))
+        # time.sleep(0.1)
 
         # rotate legs 1, 3, 5
         rotate_t1_angles = [rotate_j1, -rotate_j1, rotate_j1, -rotate_j1, rotate_j1, -rotate_j1]
@@ -273,6 +303,7 @@ class HexapodControl(RobotControl):
         for i in range(len(tripod2_ids)):
             self.setMotorTargetJointPosition(tripod2_ids[i], raise_j2)
         self.next_move(tripod2_ids, [raise_j2]*len(tripod2_ids))
+        # time.sleep(0.1)
        
         # rotate legs 2, 4, 6
         for i in range(len(rotate_ids)):
@@ -382,7 +413,7 @@ class HexapodControl(RobotControl):
             
             elif direction == 'west':
                 self.j -= 1
-
+            
         i = 0
 
         curr_error = 0
@@ -418,7 +449,15 @@ class HexapodControl(RobotControl):
 
             i += 1
         
-        print('moved one cell ', direction)
+        print('moved one cell', direction)
+
+        position, orientation = self.getRobotWorldLocation()
+        yaw = euler_from_quaternion(orientation)[2]
+
+        print(position.x)
+        print(position.y)
+        print(yaw)
+
         return
 
     # function that calculates the manhatten distance between cells       
@@ -487,11 +526,6 @@ class HexapodControl(RobotControl):
             # remove q from queue and add to path
             queue.remove(q)
             closed.append(q)
-
-            # not quite sure if I can just clear the queue, but everywhere I see on the internet
-            # looks like older items in the queue never get visited... it also caused me problems
-            # to keep old items in the queue
-            # queue = []
 
             if q == goal:
                 print('Found the goal cell!')
@@ -601,7 +635,9 @@ class HexapodControl(RobotControl):
     # *******************************************************
     def wander(self, map, current):
         # add the current node to the list of visited nodes
-        self.visited.append(current)
+        if current not in self.visited:
+            self.visited.append(current)
+        print('visited nodes: ', len(self.visited), "\n")
 
         print('wandering!')
 
@@ -613,31 +649,129 @@ class HexapodControl(RobotControl):
 
         # if a successor has not been visited, walk in that direction
         options = []
+        visited_options = []
+        
         for successor in successors:
             if successor not in self.visited:
-                options.append(successor)
+                patha = [current, successor]
+                commanda = self.command_sequence(patha)
+                options.append(commanda[0])
+            else:
+                patha = [current, successor]
+                commanda = self.command_sequence(patha)
+                visited_options.append(commanda[0])
 
-        print('the possible directions are: ')
-        for option in options:
-            print('(', option.position[0], ', ', option.position[1], ')')
+        print('unvisited cells:\n')
+        print(options, '\n')
+        print('visited cells:\n')
+        print(visited_options, '\n')
 
         if len(options) > 0:
-            random_index = random.randint(0, len(options)-1)
-            next = options[random_index]
+            if self.orientation == 'north':
+                if 'north' in options:
+                    self.move_cell('north')
+                elif 'east' in options:
+                    self.move_cell('east')
+                elif 'south' in options:
+                    self.move_cell('south')
+                elif 'west' in options:
+                    self.move_cell('west')
+            elif self.orientation == 'east':
+                if 'east' in options:
+                    self.move_cell('east')
+                elif 'south' in options:
+                    self.move_cell('south')
+                elif 'west' in options:
+                    self.move_cell('west')
+                elif 'north' in options:
+                    self.move_cell('north')
+            elif self.orientation == 'south':
+                if 'south' in options:
+                    self.move_cell('south')
+                elif 'west' in options:
+                    self.move_cell('west')
+                elif 'north' in options:
+                    self.move_cell('north')
+                elif 'east' in options:
+                    self.move_cell('east')
+            elif self.orientation == 'west':
+                if 'west' in options:
+                    self.move_cell('west')
+                elif 'north' in options:
+                    self.move_cell('north')
+                elif 'east' in options:
+                    self.move_cell('east')
+                elif 'south' in options:
+                    self.move_cell('south')
         else:
-            random_index = random.randint(0, len(successors)-1)
-            next = successors[random_index]
+            if self.orientation == 'north':
+                if 'north' in visited_options:
+                    self.move_cell('north')
+                elif 'east' in visited_options:
+                    self.move_cell('east')
+                elif 'south' in visited_options:
+                    self.move_cell('south')
+                elif 'west' in visited_options:
+                    self.move_cell('west')
+            elif self.orientation == 'east':
+                if 'east' in visited_options:
+                    self.move_cell('east')
+                elif 'south' in visited_options:
+                    self.move_cell('south')
+                elif 'west' in visited_options:
+                    self.move_cell('west')
+                elif 'north' in visited_options:
+                    self.move_cell('north')
+            elif self.orientation == 'south':
+                if 'south' in visited_options:
+                    self.move_cell('south')
+                elif 'west' in visited_options:
+                    self.move_cell('west')
+                elif 'north' in visited_options:
+                    self.move_cell('north')
+                elif 'east' in visited_options:
+                    self.move_cell('east')
+            elif self.orientation == 'west':
+                if 'west' in visited_options:
+                    self.move_cell('west')
+                elif 'north' in visited_options:
+                    self.move_cell('north')
+                elif 'east' in visited_options:
+                    self.move_cell('east')
+                elif 'south' in visited_options:
+                    self.move_cell('south')
 
-        # chooses a random cell out of unvisited cells to move
+        next = Cell((self.i, self.j))
 
-        if next.position[0] > current.position[0]:
-            self.move_cell('south')
-        elif next.position[0] < current.position[0]:
-            self.move_cell('north')
-        elif next.position[1] > current.position[1]:
-            self.move_cell('east')
-        elif next.position[1] < current.position[1]:
-            self.move_cell('west')
+        # # print('the possible directions are: ')
+        # # for option in options:
+        # #     print('(', option.position[0], ', ', option.position[1], ')')
+        # print('the possible directions are:\n')
+        # for option in options:
+        #     print(option)
+
+        # # if len(options) > 0:
+        # #     random_index = random.randint(0, len(options)-1)
+        # #     next = options[random_index]
+        # # else:
+        # #     random_index = random.randint(0, len(successors)-1)
+        # #     next = successors[random_index]
+        # if len(options) > 0:
+        #     if self.orientation in options:
+        #         self.move_cell(self.orientation)
+        #     else:
+        #         self.move_cell(option)
+
+        # # chooses a random cell out of unvisited cells to move
+
+        # if next.position[0] > current.position[0]:
+        #     self.move_cell('south')
+        # elif next.position[0] < current.position[0]:
+        #     self.move_cell('north')
+        # elif next.position[1] > current.position[1]:
+        #     self.move_cell('east')
+        # elif next.position[1] < current.position[1]:
+        #     self.move_cell('west')
 
         return next
 

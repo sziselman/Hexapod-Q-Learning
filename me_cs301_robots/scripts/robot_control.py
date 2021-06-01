@@ -29,6 +29,7 @@ class RobotControl(object):
         self.sim_time = 0.0
         
         self.robot_pose = Pose()
+        self.set_robot_pose_msg = Pose()
         self.front_sensor_val = Float32()
         self.left_sensor_val = Float32()
         self.right_sensor_val = Float32()
@@ -117,6 +118,8 @@ class RobotControl(object):
             self.leg6_j2_pub = rospy.Publisher('/leg6_j2', Float32, queue_size=1, latch=True)
             self.leg6_j3_pub = rospy.Publisher('/leg6_j3', Float32, queue_size=1, latch=True)
 
+            self.set_pose_pub = rospy.Publisher('/hexapod/set_pose', Pose, queue_size=1, latch=True)
+
         elif self.robot_type == 'rollerwalker':
             self.leg1_j1_pub = rospy.Publisher('/leg1_j1', Float32, queue_size=1, latch=True)
             self.leg1_j2_pub = rospy.Publisher('/leg1_j2', Float32, queue_size=1, latch=True)
@@ -133,6 +136,8 @@ class RobotControl(object):
             self.leg4_j1_pub = rospy.Publisher('/leg4_j1', Float32, queue_size=1, latch=True)
             self.leg4_j2_pub = rospy.Publisher('/leg4_j2', Float32, queue_size=1, latch=True)
             self.leg4_j3_pub = rospy.Publisher('/leg4_j3', Float32, queue_size=1, latch=True)
+
+            self.set_pose_pub = rospy.Publisher('/rw/set_pose', Pose, queue_size=1, latch=True)
     
     def initialize_subscribers(self):
         rospy.Subscriber('/simTime', Float32, self.simTime_cb)
@@ -145,7 +150,7 @@ class RobotControl(object):
         if self.robot_type == 'hexapod':
             rospy.Subscriber('/hexapod/joint_states', JointState, self.joint_states_cb)
         elif self.robot_type == 'rollerwalker':
-            rospy.Subscriber('/rollerwalker/joint_states', JointState, self.joint_states_cb)
+            rospy.Subscriber('/rw/joint_states', JointState, self.joint_states_cb)
     
     # subscriber callbacks
     def simTime_cb(self, msg):
@@ -172,6 +177,8 @@ class RobotControl(object):
         
     def joint_states_cb(self, msg):
         self.joint_states = msg
+        # print(self.joint_states)
+        
 
     def publish_joint_values(self): 
         if self.robot_type == 'hexapod':
@@ -281,12 +288,25 @@ class RobotControl(object):
     
     def getRobotWorldLocation(self):
         return self.robot_pose.position, self.robot_pose.orientation
+
     
     def getCurrentSimTime(self):
         return self.sim_time
     
     #setters
     
+    def setRobotPose(self, position, orientation):
+        self.set_robot_pose_msg.position.x = position.x
+        self.set_robot_pose_msg.position.y = position.y
+        self.set_robot_pose_msg.position.z = position.z
+
+        self.set_robot_pose_msg.orientation.x = orientation.x
+        self.set_robot_pose_msg.orientation.y = orientation.y
+        self.set_robot_pose_msg.orientation.z = orientation.z
+        self.set_robot_pose_msg.orientation.w = orientation.w
+        
+        self.set_pose_pub.publish(self.set_robot_pose_msg)
+
     def setMotorTargetJointPosition(self, motor_id_string='leg1_j1', target_joint_angle=0.0):
         if motor_id_string == 'leg1_j1':
             self.leg1_j1.data = target_joint_angle
