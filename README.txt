@@ -2,16 +2,20 @@ README for ME 301 Intro to Robotics Lab Assignment 3
 
 The objective: Optimize the hexapod's wall-following walking gait speed by using Q-Learning. The hexapod will learn to adjust its step size based on its distance from the wall. 
 
-In earlier assignments, a walking and turning gait was developed for the hexapod robot. A PID controller was implemented to ensure that the robot walked at a fixed distance from a wall if one was sensed.
-In the original walking gait, the robot walks at a fixed step size. Upon implementing Q-Learning, the hexapod will adjust its step size based on how far it is from the wall and how much the controller kicks in to adjust its position.
+In earlier assignments, a walking and turning gait was developed for the hexapod robot.
+A PID controller was implemented to ensure that the robot walked at a fixed distance from a wall if one was sensed.
+In the original walking gait, the robot walks at a fixed step size. 
+Upon implementing Q-Learning, the hexapod will adjust its step size based on how far it is from the wall and how much the controller kicks in to adjust its position.
 There are three files provided:
 1. asn3.py (This is the python script that implements training, implementation and evaluation)
 2. 10x10qmatrix.csv (This is the .csv file that stores the 10x10 q matrix built from the Q-Learning method, it is important that it is in the ros workspace directory)
 3. HexapodRobot_asn3.ttt (This is the scene file to be loaded into CoppeliaSim)
 
 Here is a brief explanation of what happens in the asn3.py file:
-1. a) If this is the first time that a Q-matrix is being built, the comment 'Q_mat = np.zeros((N, N))' under HexapodControl class must be uncommented, and 'Q_mat = np.genfromtxt("/home/sarah/Documents/ME301/me_cs301_coppeliasim_robots/10x10qmatrix.csv", delimiter=",")' must be commented out. This will start the matrix with 0's. 
-1. b) If this is being built off of a previously trained Q-matrix, the comment 'Q_mat = np.zeros((N, N))' under HexapodControl class must be commented and 'Q_mat = np.genfromtxt("/home/sarah/Documents/ME301/me_cs301_coppeliasim_robots/10x10qmatrix.csv", delimiter=",")' must be uncommented. This will load in the .csv file and build off of values already present.
+1. a) If this is the first time that a Q-matrix is being built, the comment 'Q_mat = np.zeros((N, N))' under HexapodControl class must be uncommented,
+      and 'Q_mat = np.genfromtxt("/home/sarah/Documents/ME301/me_cs301_coppeliasim_robots/10x10qmatrix.csv", delimiter=",")' must be commented out. This will start the matrix with 0's. 
+1. b) If this is being built off of a previously trained Q-matrix, the comment 'Q_mat = np.zeros((N, N))' under HexapodControl class must be commented out,
+      and 'Q_mat = np.genfromtxt("/home/sarah/Documents/ME301/me_cs301_coppeliasim_robots/10x10qmatrix.csv", delimiter=",")' must be uncommented. This will load in the .csv file and build off of values already present.
 2. Run the python script using the command "rosrun me_cs301_grp asn3.py"
 3. Three options will be given: training, implementing and evaluating. 
 4. a) 'training' will have the hexapod walk along a wall until the front sensor detects an obstacle. Once an obstacle is detected in front, it will reset the robot's position at (0, 0) and repeat indefinitely.
