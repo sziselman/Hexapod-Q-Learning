@@ -39,11 +39,15 @@ j1_limits = [-0.75, 0.75]
 j2_limits = [-1.30, 0.52]
 j3_limits = [-3.14, 3.14]
 
+uniform_step = 0.50
+
+# function that takes a sensor reading (distance from the wall) and fits it to the nearest state
 def fit2states(states, distance):
     array = np.asarray(states)
     index = (np.abs(array - distance)).argmin()
     return index
 
+# function that takes roll, pitch, yaw and returns a quaternion
 def euler_to_quaternion(roll, pitch, yaw):
 
     qx = np.sin(roll/2) * np.cos(pitch/2) * np.cos(yaw/2) - np.cos(roll/2) * np.sin(pitch/2) * np.sin(yaw/2)
@@ -69,19 +73,15 @@ class HexapodControl(RobotControl):
         actions = np.linspace(0.35, 0.65, self.N)
         states = np.linspace(0.10, 0.40, self.N)
 
-        train = input('Are you training? (true or false): ')
-        while train != 'true' and train != 'false':
-            train = input('Are you training? (true or false): ')
+        train = input('Are you training, implementing or evaluating? ')
+        while train != 'training' and train != 'implementing' and train != 'evaluating':
+            train = input('Are you training, implementing or evaluating? ')
 
-        if train == 'true':
+        if train == 'training':
             # checks for what policy will be used to decide robot's actions
             policy = input('Enter policy to build Q-Table (random or epsilon greedy): ')
             while policy != 'random' and policy != 'epsilon greedy':
                 policy = input('Enter policy to build Q-Table: ')
-
-        ##################################
-        # Uncomment section to Q-table using Q-Learning
-        ##################################
 
         runs = 0
         
@@ -91,8 +91,11 @@ class HexapodControl(RobotControl):
         desired_dist = 0.325
 
         while not rospy.is_shutdown():
-
-            if train == 'true':
+            
+            ###############################
+            # TRAINING: Used for building the Q-table using a random policy and epsilon greedy policy
+            ###############################
+            if train == 'training':
 
                 prev_position, prev_orientation = self.getRobotWorldLocation()
                 prev_x = prev_position.x
@@ -187,18 +190,43 @@ class HexapodControl(RobotControl):
                 tot_error = 0
                 desired_dist = 0.325
 
-            elif train == 'false':
+            ###############################
+            # IMPLEMENTING: Implementing the robot's walking gait using the Q-Learning model through the provided obstacle course
+            ###############################
+            elif train == 'implementing':
+                
+                # if front sensor is within turning range
+                if self.getSensorValue('front') > 0 and self.getSensorValue('front') < 0.275:
+                    # readings only from left sensor
+                    if self.getSensorValue('left') > 0 and self.getSensorValue('right') < 0:
+                        self.turn_right90()
+                    
+                    # readings only from right sensor
+                    elif self.getSensorValue('right') > 0 and self.getSensorValue('left') < 0:
+                        self.turn_left90()
+                    
+                    # readings from both left and right sensor
+                    elif self.getSensorValue('left') > 0 and self.getSensorValue('right') > 0:
+                        self.turn_around()
 
+                
                 # get the distance from the wall depending on the sensor that is being triggered, calculate current error for PID controller
+                # readings only from left sensor
                 if self.getSensorValue('left') > 0 and self.getSensorValue('right') < 0:
                     distance = self.getSensorValue('left')
                     curr_error = distance - desired_dist
+                
+                # readings only from right sensor
                 elif self.getSensorValue('right') > 0 and self.getSensorValue('left') < 0:
                     distance = self.getSensorValue('right')
                     curr_error = distance - desired_dist
+
+                # readings from both left and right sensors
                 elif self.getSensorValue('left') > 0 and self.getSensorValue('right') > 0:
                     distance = self.getSensorValue('left')
                     curr_error = distance - desired_dist
+                
+                # readings from neither sensors, stop the robot
                 else:
                     break
 
@@ -212,7 +240,12 @@ class HexapodControl(RobotControl):
 
                 # determine the control using PID
                 tot_error += curr_error
-                control = self.pid_control(curr_error, prev_error, tot_error)
+
+                if self.getSensorValue('left') > 0:
+                    control = self.pid_control(curr_error, prev_error, tot_error)
+                elif self.getSensorValue('right') > 0:
+                    control = -self.pid_control(curr_error, prev_error, tot_error)
+
                 prev_error = curr_error
 
                 # check to ensure robot has not exceeded joint limits
@@ -222,11 +255,100 @@ class HexapodControl(RobotControl):
                     control = j1_limits[0] + action
 
                 # have robot take one step forward
+                # if you want to have the robot step using the Q-Learning model, uncomment the following:
                 self.step(control, action)
 
-                time.sleep(0.1)
+                # if you want to have the robot step with a uniform step size of 0.5, uncomment the following:
+                # self.step(control, uniform_step)
 
-        # ##################################            
+                time.sleep(0.1)         
+
+            ###############################
+            # EVALUATING: Have the robot walk a distance of approximately 1.5 m, measure the travel time, generate velocity
+            ###############################
+            elif train == 'evaluating':
+
+                start_position, start_orientation = self.getRobotWorldLocation()
+                start_x = start_position.x
+                start_y = start_position.y
+
+                start_time = rospy.get_time()
+
+                distance_traveled = 0
+                
+                # have robot walk until it detects an obstacle in front, at each step update the q matrix
+                while distance_traveled < 1.5:
+
+                    # get the distance from the wall depending on the sensor that is being triggered, calculate current error for PID controller
+                    if self.getSensorValue('left') > 0 and self.getSensorValue('right') < 0:
+                        distance = self.getSensorValue('left')
+                        curr_error = distance - desired_dist
+                    elif self.getSensorValue('right') > 0 and self.getSensorValue('left') < 0:
+                        distance = self.getSensorValue('right')
+                        curr_error = distance - desired_dist
+                    elif self.getSensorValue('left') > 0 and self.getSensorValue('right') > 0:
+                        distance = self.getSensorValue('left')
+                        curr_error = distance - desired_dist
+                    else:
+                        break
+                    
+                    # transition function (distance from the wall)
+                    state_index = fit2states(states, distance)
+                    state = states[state_index]
+
+                    # find action with maximum reward
+                    action_index = (self.Q_mat[state_index]).argmax()
+                    action = actions[action_index]
+
+                    # determine the control using PID
+                    tot_error += curr_error
+                    control = self.pid_control(curr_error, prev_error, tot_error)
+                    prev_error = curr_error
+
+                    # check to ensure robot has not exceeded joint limits
+                    if action + control > j1_limits[1]:
+                        control = j1_limits[1] - action
+                    elif -action + control < j1_limits[0]:
+                        control = j1_limits[0] + action
+
+                    # have robot take one step forward
+                    # if you want to have the robot step using the Q-Learning model, uncomment the following:
+                    self.step(control, action)
+
+                    # if you want to have the robot step with a uniform step size of 0.5, uncomment the following:
+                    # self.step(control, uniform_step)
+
+                    curr_position, curr_orientation = self.getRobotWorldLocation()
+                    
+                    # calculate total distance traveled
+                    distance_traveled = math.sqrt((curr_position.x - start_x)**2 + (curr_position.y - start_y)**2)
+
+                end_time = rospy.get_time()
+
+                total_time = end_time - start_time
+
+                velocity = distance_traveled / total_time
+
+                print('It took ', total_time, 'seconds to travel a distance of ', distance_traveled, 'meters.')
+                print('This results in a velocity of ', velocity, 'm/s.\n')
+
+                # reset the location and orientation of the robot to starting
+                quaternion = euler_to_quaternion(0.0, -math.pi/2, math.pi)
+                position, orientation = self.getRobotWorldLocation()
+                position.x = 0
+                position.y = 0
+                orientation.x = quaternion[0]
+                orientation.y = quaternion[1]
+                orientation.z = quaternion[2]
+                orientation.w = quaternion[3]
+
+                self.setRobotPose(position, orientation)
+
+                # reset the PID controller errors
+                curr_error = 0
+                prev_error = 0
+                tot_error = 0
+                desired_dist = 0.325
 
     def hold_neutral(self):
         # --- simple example of a behavior ---- #
@@ -349,14 +471,12 @@ class HexapodControl(RobotControl):
         for i in range(len(tripod1_ids)):
             self.setMotorTargetJointPosition(tripod1_ids[i], raise_j2)
         self.next_move(tripod1_ids, [raise_j2]*len(tripod1_ids))
-        # time.sleep(0.1)
 
         # rotate legs 1, 3, 5
         rotate_t1_angles = [rotate_j1, -rotate_j1, rotate_j1, -rotate_j1, rotate_j1, -rotate_j1]
 
         for i in range(len(rotate_ids)):
             self.setMotorTargetJointPosition(rotate_ids[i], rotate_t1_angles[i])
-
         self.next_move(rotate_ids, rotate_t1_angles)
 
         # lower legs 1, 3, 5
@@ -368,7 +488,6 @@ class HexapodControl(RobotControl):
         for i in range(len(tripod2_ids)):
             self.setMotorTargetJointPosition(tripod2_ids[i], raise_j2)
         self.next_move(tripod2_ids, [raise_j2]*len(tripod2_ids))
-        # time.sleep(0.1)
        
         # rotate legs 2, 4, 6
         for i in range(len(rotate_ids)):
